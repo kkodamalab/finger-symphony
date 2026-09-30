@@ -1,0 +1,3 @@
+import {describe,it,expect} from 'vitest';import {analyze,jointAngle,wrap180} from './coordination';
+const wave=(p:number)=>Array.from({length:201},(_,i)=>({t:i*50,angle:90+30*Math.sin(i*.25+p)}));
+describe('analysis',()=>{it('wraps phase',()=>expect(wrap180(180)).toBe(-180));it('measures angle',()=>expect(jointAngle([1,0],[0,0],[0,1])).toBeCloseTo(90));it('finds 0°, 90°, 180°',()=>{expect(Math.abs(analyze(wave(0),wave(0)).phase)).toBeLessThan(5);expect(Math.abs(Math.abs(analyze(wave(0),wave(Math.PI/2)).phase)-90)).toBeLessThan(8);expect(Math.abs(Math.abs(analyze(wave(0),wave(Math.PI)).phase)-180)).toBeLessThan(8)});it('rejects stillness',()=>expect(analyze(wave(0).map(x=>({...x,angle:90})),wave(0)).available).toBe(false))});

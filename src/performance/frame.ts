@@ -44,14 +44,19 @@ export class CrossingTracker {
   previous?: Point; private last = new Map<Edge, number>();
   constructor(public options: CrossingOptions) {}
   reset() { this.previous = undefined; }
-  update(point: Point, frame: Frame, now: number): Crossing | undefined {
+  updateAll(point: Point, frame: Frame, now: number): Crossing[] {
     const previous = this.previous; this.previous = point;
-    if (!previous || Math.hypot(point.x - previous.x, point.y - previous.y) < this.options.minDistance) return;
-    const crossing = segmentFrameCrossings(previous, point, frame)[0];
-    if (!crossing || now - (this.last.get(crossing.edge) ?? -Infinity) < this.options.cooldownMs) return;
+    if (!previous || Math.hypot(point.x - previous.x, point.y - previous.y) < this.options.minDistance) return [];
+    const crossings = segmentFrameCrossings(previous, point, frame);
+    if (!crossings.length) return [];
     const beforeInside = insideFrame(previous, frame, this.options.hysteresis);
     const afterInside = insideFrame(point, frame, this.options.hysteresis);
-    if (beforeInside === afterInside) return;
-    this.last.set(crossing.edge, now); return crossing;
+    if (crossings.length === 1 && beforeInside === afterInside) return [];
+    return crossings.filter(crossing => {
+      if (now - (this.last.get(crossing.edge) ?? -Infinity) < this.options.cooldownMs) return false;
+      this.last.set(crossing.edge, now);
+      return true;
+    });
   }
+  update(point: Point, frame: Frame, now: number) { return this.updateAll(point, frame, now)[0]; }
 }

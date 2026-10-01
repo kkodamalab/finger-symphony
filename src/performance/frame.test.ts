@@ -10,6 +10,13 @@ describe('frame crossing', () => {
     expect(segmentFrameCrossings({x:0,y:.5},{x:.5,y:.5},frame)[0].edge).toBe('left');
   });
   it('detects a fast pass through and orders crossings', () => expect(segmentFrameCrossings({x:0,y:.5},{x:1,y:.5},frame).map(x=>x.edge)).toEqual(['left','right']));
+  it('emits every edge of a one-frame pass in trajectory order', () => {
+    const tracker=new CrossingTracker({cooldownMs:120,minDistance:.02,hysteresis:.01});
+    tracker.updateAll({x:0,y:.5},frame,0);
+    expect(tracker.updateAll({x:1,y:.5},frame,20).map(x=>x.edge)).toEqual(['left','right']);
+    tracker.updateAll({x:0,y:.5},frame,40);
+    expect(tracker.updateAll({x:1,y:.5},frame,60)).toEqual([]);
+  });
   it('maps different positions and edges to different notes', () => {
     const a=edgeNote(segmentFrameCrossings({x:.25,y:0},{x:.25,y:.5},frame)[0]);
     const b=edgeNote(segmentFrameCrossings({x:.7,y:0},{x:.7,y:.5},frame)[0]);

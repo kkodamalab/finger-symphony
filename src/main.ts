@@ -25,7 +25,22 @@ app.innerHTML=`<main><header class="statusbar"><span id="camera-status">CAMERA: 
 <footer><span id="fps">RENDER — FPS · TRACKING —</span><span>LEFT <b id="lh">OFF</b> / RIGHT <b id="rh">OFF</b></span></footer></main>`;
 const $=<T extends HTMLElement>(s:string)=>document.querySelector<T>(s)!;const video=$<HTMLVideoElement>('#video'),canvas=$<HTMLCanvasElement>('#canvas'),ctx=canvas.getContext('2d')!,graph=$<HTMLCanvasElement>('#graph'),gctx=graph.getContext('2d')!,stage=$('.stage'),area=$('#area');
 const hands=new Hands(),music=new MusicEngine(),histories:Record<Side,Sample[]>={Left:[],Right:[]},trackers:Record<Side,CrossingTracker>={Left:new CrossingTracker({cooldownMs:120,minDistance:.008,hysteresis:.008}),Right:new CrossingTracker({cooldownMs:120,minDistance:.008,hysteresis:.008})};
-let frame:Frame=JSON.parse(localStorage.getItem('finger-symphony-frame')||'{"x":.18,"y":.2,"width":.64,"height":.6}'),mode:MusicMode='band',front=true,cameraVisible=true,skeleton=true,audio=false,auto=true,coordination=true,edit=false,demo='off',tempoSource:TempoSource='manual',animation=0,lastVideo=0,frames=0,fpsAt=0,colorOn=false,colorLock=false,lastColorAt=0;
+const DEFAULT_FRAME:Frame={x:0.18,y:0.2,width:0.64,height:0.6};
+function loadFrame():Frame{
+  try{
+    const saved=localStorage.getItem('finger-symphony-frame');
+    if(!saved)return {...DEFAULT_FRAME};
+    const value:unknown=JSON.parse(saved);
+    if(typeof value!=='object'||value===null)return {...DEFAULT_FRAME};
+    const candidate=value as Record<string,unknown>;
+    const {x,y,width,height}=candidate;
+    if(![x,y,width,height].every(v=>typeof v==='number'&&Number.isFinite(v)))return {...DEFAULT_FRAME};
+    const f={x:x as number,y:y as number,width:width as number,height:height as number};
+    if(f.width<0.2||f.height<0.2||f.x<0||f.y<0||f.x+f.width>1||f.y+f.height>1)return {...DEFAULT_FRAME};
+    return f;
+  }catch{return {...DEFAULT_FRAME}}
+}
+let frame:Frame=loadFrame(),mode:MusicMode='band',front=true,cameraVisible=true,skeleton=true,audio=false,auto=true,coordination=true,edit=false,demo='off',tempoSource:TempoSource='manual',animation=0,lastVideo=0,frames=0,fpsAt=0,colorOn=false,colorLock=false,lastColorAt=0;
 const stableColor=new StableColor(),trails:{x:number;y:number;t:number;side:Side}[]=[],ripples:{x:number;y:number;t:number;side:Side}[]=[],freeZone:Record<Side,number|undefined>={Left:undefined,Right:undefined};
 const microphoneInput=new MicrophoneTempoInput();
 const cameraSession=new CameraSession({video,requestStream:frontCamera=>navigator.mediaDevices.getUserMedia({video:{facingMode:frontCamera?'user':'environment',width:{ideal:1280},height:{ideal:720}},audio:false}),initializeTracking:()=>hands.init(),onReport:report=>{const message=report.message?' · '+report.message:'';$('#camera-status').textContent='CAMERA: '+report.camera+(report.camera==='ERROR'?message:'');$('#tracking-status').textContent='TRACKING: '+report.tracking+(report.tracking==='ERROR'?message:'')},onCameraReady:()=>{$('#start').hidden=true;startLoop()}});

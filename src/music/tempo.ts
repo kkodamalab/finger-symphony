@@ -1,0 +1,5 @@
+import type { Sample } from '../analysis/coordination';
+export type TempoSource='manual'|'body'|'mic'|'weather';
+export function bodyTempo(samples:Sample[]){if(samples.length<20)return null;const peaks:number[]=[];for(let i=1;i<samples.length-1;i++)if(samples[i].angle>samples[i-1].angle&&samples[i].angle>=samples[i+1].angle)peaks.push(samples[i].t);if(peaks.length<3)return null;const periods=peaks.slice(1).map((t,i)=>t-peaks[i]).filter(x=>x>330&&x<1500);if(periods.length<2)return null;const mean=periods.reduce((a,b)=>a+b,0)/periods.length,spread=Math.sqrt(periods.reduce((s,x)=>s+(x-mean)**2,0)/periods.length)/mean;return spread<.3?Math.max(40,Math.min(180,60000/mean)):null}
+export function reconcileTempo(candidate:number,current:number){const options=[candidate/2,candidate,candidate*2].filter(x=>x>=40&&x<=180);return options.sort((a,b)=>Math.abs(a-current)-Math.abs(b-current))[0]??current}
+export const weatherTempo=(windKmh:number)=>Math.round(Math.max(55,Math.min(145,55+windKmh*2.25)));

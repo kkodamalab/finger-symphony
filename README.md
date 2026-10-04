@@ -17,7 +17,7 @@ Click **AUDIO ON** before playing. Camera and audio are independent. All camera 
 ## Camera-free demo (recommended)
 
 1. Select **DEMO MODE**: 0°, 90°, 180°, VARIABLE, or STOP.
-2. Choose BAND, TECHNO, AMBIENT, or DUB from the mode bar.
+2. Choose BAND, TECHNO, AMBIENT, DUB, DUBSTEP, or JUNGLE from the mode bar.
 3. Enable audio, then drag or swipe across any performance-frame edge.
 4. Watch edge labels, note flashes, trails, phase/stability, chord, and BPM readouts.
 
@@ -25,12 +25,18 @@ The simulation supplies bilateral flexion waves for coordination analysis while 
 
 ## Music modes
 
-| Mode | Default | Bottom | Top | Left | Right |
-| --- | --- | --- | --- | --- | --- |
-| BAND | 100 BPM / 8 Beat | kick + bass | piano/horn melody | snare/hat | guitar/chord |
-| TECHNO | 125 BPM / four-on-floor | kick + sub | lead/arpeggio | hat/percussion | stab/filter |
-| AMBIENT | 60 BPM / free time | low drone | overtone/slow melody | texture | space/reverb |
-| DUB | 75 BPM / dub pattern | bass + kick | organ/melody | snare/rim | delay/reverb |
+| Mode | BPM | Rhythm | Body control |
+| --- | ---: | --- | --- |
+| BAND | 100 | 8 Beat / Funk / Bossa | Frame gestures |
+| TECHNO | 125 | Four-on-the-floor | Frame gestures |
+| AMBIENT | 60 | Free time | Coordination / edge proximity |
+| DUB | 75 | Dub | Delay / space |
+| DUBSTEP | 140 | Half-time | Hand distance → wobble |
+| JUNGLE | 170 | Generated breakbeat | Hand speed → break intensity |
+
+DUBSTEP uses a synthesized sub/wobble voice—no copyrighted samples—with hand distance controlling smoothed filter cutoff, LFO rate, and resonance. Its frame maps bottom to kick/sub, top to bass stab/lead, left to snare/percussion, and right to wobble/filter accents.
+
+JUNGLE generates four original 16-step break patterns from kick, snare, hi-hat, ghost-note, percussion, and bass synth voices. Smoothed fingertip speed selects pattern density with hysteresis and cooldown; crossing the right edge advances a variation/fill without changing the 170 BPM foundation.
 
 Auto accompaniment can be disabled. Quantization is OFF, 1/4, 1/8, or 1/16. Mode defaults can be overridden using rhythm, BPM, key, scale, progression, quantize, and volume controls.
 
@@ -48,7 +54,7 @@ Relative phase maps to voicing or genre-specific processing; coordination stabil
 - **BODY**: estimates a stable period from index-flexion peaks and smoothly updates transport tempo.
 - **MIC**: local transient interval estimate with half/double-tempo reconciliation and confidence display; denied access falls back to MANUAL.
 - **WEATHER**: location plus Open-Meteo wind speed, mapped as `55 + 2.25 × km/h` and clamped to 55–145 BPM; errors fall back to MANUAL.
-- **COLOR TO MUSIC**: samples the camera center, converts RGB to HSV, waits for eight stable samples, and maps color families to scale/mode. COLOR LOCK freezes the result.
+- **COLOR TO MUSIC**: samples the camera center, converts RGB to HSV, waits for eight stable samples, and maps color families to scale selection without changing the manually selected music mode. COLOR LOCK freezes the result.
 
 ## Deployment
 

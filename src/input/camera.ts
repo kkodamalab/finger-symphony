@@ -25,7 +25,7 @@ export class CameraSession{
     if(this.pending)return this.pending;
     if(this.stream){this.setPresentation(this.visible,front);return Promise.resolve()}
     const generation=++this.generation;this.mirrored=front;
-    this.pending=this.open(front,generation).finally(()=>{this.pending=undefined});
+    const opening=this.open(front,generation);this.pending=opening.finally(()=>{if(this.pending===pending)this.pending=undefined});const pending=this.pending;
     return this.pending;
   }
   private async open(front:boolean,generation:number){
@@ -35,13 +35,13 @@ export class CameraSession{
       if(generation!==this.generation){stream.getTracks().forEach(track=>track.stop());return}
       this.stream=stream;this.options.video.srcObject=stream;this.setPresentation(this.visible,front);
       await this.options.video.play();
-      if(generation!==this.generation)return;
+      if(generation!==this.generation){this.releaseStream();return}
       this.options.onReport({camera:'READY',tracking:'LOADING'});this.options.onCameraReady();
       try{await this.options.initializeTracking();if(generation===this.generation)this.options.onReport({camera:'READY',tracking:'READY'})}
       catch(error){if(generation===this.generation)this.options.onReport({camera:'READY',tracking:'ERROR',message:errorMessage(error)})}
     }catch(error){if(generation===this.generation){this.releaseStream();this.options.video.srcObject=null;this.options.onReport({camera:'ERROR',tracking:'IDLE',message:errorMessage(error)})}}
   }
-  stop(){this.generation++;this.releaseStream();this.options.video.pause();this.options.video.srcObject=null;this.options.onReport({camera:'IDLE',tracking:'IDLE'})}
+  stop(){this.generation++;this.pending=undefined;this.releaseStream();this.options.video.pause();this.options.video.srcObject=null;this.options.onReport({camera:'IDLE',tracking:'IDLE'})}
   async switchCamera(front:boolean){this.stop();await this.start(front)}
   private releaseStream(){this.stream?.getTracks().forEach(track=>track.stop());this.stream=undefined}
 }

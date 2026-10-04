@@ -24,6 +24,7 @@ export class MusicEngine{
   private melody=new Tone.PolySynth(Tone.Synth).connect(this.melodyGain);private chords=[new Tone.PolySynth(Tone.Synth).connect(this.harmonyGain),new Tone.PolySynth(Tone.Synth).connect(this.harmonyGain)];
   private bass=new Tone.MonoSynth().connect(this.bassGain);private kick=new Tone.MembraneSynth().connect(this.drumGain);private noise=new Tone.NoiseSynth({volume:-14}).connect(this.drumGain);
   private texture=new Tone.NoiseSynth({volume:-22,envelope:{attack:1,release:3}}).connect(this.reverb);
+  private thereminGain=new Tone.Gain(0).connect(this.master);private theremin=new Tone.Synth({oscillator:{type:'sine'},envelope:{attack:.03,release:.12}}).connect(this.thereminGain);private thereminActive=false;
   private wobbleGain=new Tone.Gain(.28).connect(this.bassGain);private wobbleDrive=new Tone.Distortion(.18).connect(this.wobbleGain);private wobble=new Tone.MonoSynth({oscillator:{type:'sawtooth'},filter:{type:'lowpass',Q:4,rolloff:-24},envelope:{attack:.03,decay:.2,sustain:.7,release:.25},filterEnvelope:{attack:.02,decay:.15,sustain:.4,release:.2,baseFrequency:100,octaves:3}}).connect(this.wobbleDrive);private wobbleLfo=new Tone.LFO({frequency:1,min:120,max:900}).connect(this.wobble.filter.frequency).start();
   private scheduled?:number;private chord?:HarmonyName;private chordKey='';private bank=0;private step=0;private enabled=false;private accompaniment=true;private wobbleActive=false;private junglePattern=0;
   mode:MusicMode='band';rhythm:Rhythm='8 beat';root='C';scale:ScaleName='major pentatonic';progression:ProgressionName='pop';experimental=false;quantize:'4n'|'8n'|'16n'|null='8n';bpm=100;
@@ -35,6 +36,7 @@ export class MusicEngine{
   setRhythm(rhythm:Rhythm){this.rhythm=rhythm;this.restartPattern()}
   setVolumes(master:number,melody:number,harmony:number){this.master.gain.rampTo(clamp01(master),.1);this.melodyGain.gain.rampTo(clamp01(melody),.1);this.harmonyGain.gain.rampTo(clamp01(harmony),.1)}
   setGestureControl(value:number){const amount=clamp01(value);if(this.mode==='dubstep'){const params=wobbleParameters(amount);this.wobbleLfo.frequency.rampTo(params.lfoHz,.12);this.wobbleLfo.min=Math.max(80,params.cutoff*.28);this.wobbleLfo.max=params.cutoff;this.wobble.filter.Q.rampTo(params.resonance,.15);this.wobbleDrive.distortion=.12+amount*.28;if(this.enabled&&!this.wobbleActive){this.wobble.triggerAttack(this.noteFromSemitone(-24),undefined,.32);this.wobbleActive=true}}else if(this.mode==='jungle')this.junglePattern=breakPatternIndex(amount)}
+  setTheremin(on:boolean,pitch01=.5,volume01=.5){const pitch=clamp01(pitch01),volume=clamp01(volume01);if(!this.enabled||!on){if(this.thereminActive){this.theremin.triggerRelease();this.thereminActive=false}this.thereminGain.gain.rampTo(0,.05);return}const midi=48+pitch*36;this.theremin.frequency.rampTo(Tone.Frequency(midi,'midi').toFrequency(),.06);this.thereminGain.gain.rampTo(.05+volume*.28,.06);if(!this.thereminActive){this.theremin.triggerAttack(Tone.Frequency(midi,'midi').toFrequency(),undefined,.45);this.thereminActive=true}}
   get activePatternCount(){return this.scheduled===undefined?0:1}
   private stopPattern(){if(this.scheduled!==undefined){Tone.getTransport().clear(this.scheduled);this.scheduled=undefined}}
   private restartPattern(){if(!this.accompaniment||this.rhythm==='free time'){this.stopPattern();return}this.step=0;const transport=Tone.getTransport();this.scheduled=replaceScheduledEvent(this.scheduled,id=>transport.clear(id),()=>transport.scheduleRepeat((time:number)=>this.tick(time),this.mode==='jungle'?'16n':'8n'))}
@@ -48,7 +50,7 @@ export class MusicEngine{
   get harmonyName(){return this.chord?.toUpperCase()??'UNAVAILABLE'}
   dispose(){this.stopPattern();this.stopVoices();this.wobbleLfo.stop()}
   private resetEffects(){this.delaySend.gain.rampTo(0,.08);this.reverbSend.gain.rampTo(.08,.08);this.delay.feedback.rampTo(.25,.08);this.wobbleDrive.distortion=.18}
-  stopVoices(){this.melody.releaseAll();this.chords.forEach(x=>x.releaseAll());this.bass.triggerRelease();this.texture.triggerRelease();this.wobble.triggerRelease();this.wobbleActive=false;this.chordKey='';this.chord=undefined}
+  stopVoices(){this.melody.releaseAll();this.chords.forEach(x=>x.releaseAll());this.bass.triggerRelease();this.texture.triggerRelease();this.wobble.triggerRelease();this.wobbleActive=false;this.theremin.triggerRelease();this.thereminActive=false;this.thereminGain.gain.rampTo(0,.05);this.chordKey='';this.chord=undefined}
 }
 
 export{MusicEngine as Music};

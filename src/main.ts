@@ -43,6 +43,7 @@ function loadFrame():Frame{
 }
 let frame:Frame=loadFrame(),mode:MusicMode='band',front=true,cameraVisible=true,skeleton=true,audio=false,auto=true,coordination=true,edit=false,demo='off',tempoSource:TempoSource='manual',animation=0,lastVideo=0,frames=0,fpsAt=0,colorOn=false,colorLock=false,lastColorAt=0;
 const stableColor=new StableColor(),trails:{x:number;y:number;t:number;side:Side}[]=[],ripples:{x:number;y:number;t:number;side:Side}[]=[],freeZone:Record<Side,number|undefined>={Left:undefined,Right:undefined};
+const tips:Partial<Record<Side,Point>>={};
 const wobbleControl=new SmoothedControl(0,.15),jungleControl=new BreakControl();
 const microphoneInput=new MicrophoneTempoInput();
 const cameraSession=new CameraSession({video,requestStream:frontCamera=>navigator.mediaDevices.getUserMedia({video:{facingMode:frontCamera?'user':'environment',width:{ideal:1280},height:{ideal:720}},audio:false}),initializeTracking:()=>hands.init(),onReport:report=>{const message=report.message?' · '+report.message:'';$('#camera-status').textContent='CAMERA: '+report.camera+(report.camera==='ERROR'?message:'');$('#tracking-status').textContent='TRACKING: '+report.tracking+(report.tracking==='ERROR'?message:'')},onCameraReady:()=>{$('#start').hidden=true;startLoop()}});

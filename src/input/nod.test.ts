@@ -1,0 +1,2 @@
+import{describe,expect,it}from'vitest';import{NodDetector}from'./nod';
+describe('nod detector',()=>{it('detects down then return, not a single-frame move',()=>{const n=new NodDetector();expect(n.update(.4,0)).toBe(false);expect(n.update(.44,200)).toBe(false);expect(n.update(.4,450)).toBe(true)});it('rejects slow or repeated motion during cooldown',()=>{const n=new NodDetector();n.update(.4,0);n.update(.44,200);expect(n.update(.4,400)).toBe(true);n.update(.44,600);expect(n.update(.4,800)).toBe(false)})});

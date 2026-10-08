@@ -1,0 +1,3 @@
+import{describe,expect,it,vi}from'vitest';import{harmonyForPhase,replaceScheduledEvent}from'./engine';
+describe('harmony mapping',()=>{it('maps in phase, quadrature and anti-phase',()=>{expect(harmonyForPhase(0)).toBe('maj7');expect(harmonyForPhase(90)).toBe('sus');expect(harmonyForPhase(180)).toBe('minadd9')});it('uses hysteresis',()=>expect(harmonyForPhase(50,'maj7')).toBe('maj7'))});
+describe('mode scheduling',()=>{it('clears the previous loop before scheduling its replacement',()=>{const clear=vi.fn(),schedule=vi.fn(()=>22);expect(replaceScheduledEvent(11,clear,schedule)).toBe(22);expect(clear).toHaveBeenCalledWith(11);expect(clear.mock.invocationCallOrder[0]).toBeLessThan(schedule.mock.invocationCallOrder[0])})});

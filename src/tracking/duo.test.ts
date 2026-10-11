@@ -10,6 +10,24 @@ function raw(xs:number[],timestamp:number):RawFrame{
   const poses=xs.map(pose);return {timestamp,poses,hands:poses.flatMap(p=>[15,16].map(i=>Array.from({length:21},()=>({...p[i]}))))};
 }
 describe('duo identity and calibration',()=>{
+  it.each([1,2] as const)('accepts real MediaPipe hand visibility=0 for %s people',count=>{
+    const tracker=new IdentityTracker(count),xs=count===1?[.5]:[.25,.75];let f;
+    for(let t=0;t<=1200;t+=300){const input=raw(xs,t);input.hands.forEach(h=>h.forEach(p=>p.visibility=0));f=tracker.update(input)}
+    expect(f!.hands.filter(h=>h.status==='TRACKING')).toHaveLength(count*2);expect(tracker.calibrated).toBe(true);
+  });
+  it('shows partial progress at 4 FPS and resets on an actually missing hand',()=>{
+    const tracker=new IdentityTracker(1);tracker.update(raw([.5],0));tracker.update(raw([.5],270));tracker.update(raw([.5],540));expect(tracker.progress).toBeCloseTo(.54);
+    const lost=raw([.5],810);lost.hands.pop();tracker.update(lost);expect(tracker.progress).toBe(0);expect(tracker.calibrated).toBe(false);
+    for(let t=1080;t<=2160;t+=270)tracker.update(raw([.5],t));expect(tracker.calibrated).toBe(true);
+  });
+  it('explains zero detections after ten seconds and fully clears progress on reset',()=>{
+    const tracker=new IdentityTracker(1);for(let t=0;t<=10000;t+=250){const r=raw([.5],t);r.hands=[];tracker.update(r)}
+    expect(tracker.calibration(10000)).toMatchObject({progress:0,timedOut:true});expect(tracker.reason).toContain('検出が0件');expect(tracker.calibrated).toBe(false);
+    tracker.reset();expect(tracker.players).toEqual([]);expect(tracker.calibration(10000).timedOut).toBe(false);expect(tracker.progress).toBe(0);
+  });
+  it('retains Pose visibility checks while diagnosing rejected hand assignments',()=>{
+    const tracker=new IdentityTracker(1),r=raw([.5],0);r.poses[0][15].visibility=.1;const f=tracker.update(r);expect(f.handCount).toBe(2);expect(f.hands[0].status).toBe('LOST');expect(f.hands[0].reason).toContain('可視性不足');
+  });
   it('registers screen-left P1 under mirroring and keeps anatomical hands',()=>{
     const tracker=new IdentityTracker(2,true);const f=tracker.update(raw([.25,.75],0));
     expect(f.players.find(p=>p.id==='P1')!.pose[11].x).toBeCloseTo(.82);

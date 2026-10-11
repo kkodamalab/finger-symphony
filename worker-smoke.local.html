@@ -1,0 +1,11 @@
+<!doctype html><html><meta charset="utf-8"><title>Worker smoke check (no camera)</title><body><h1>Blank-frame worker benchmark — NOT real camera validation</h1><pre id="result">Loading models…</pre><script type="module">
+import {DuoClient} from './src/tracking/duo-client.ts';
+const client=new DuoClient(),out=document.querySelector('#result');
+let renders=0,active=true;function render(){if(active){renders++;requestAnimationFrame(render)}}requestAnimationFrame(render);
+try{
+  await client.init();const canvas=document.createElement('canvas');canvas.width=960;canvas.height=540;canvas.getContext('2d').fillRect(0,0,960,540);
+  const samples=[],start=performance.now();renders=0;
+  for(let i=0;i<12;i++){const t=performance.now(),r=await client.detect(canvas,t);samples.push({poseMs:r.poseMs,handMs:r.handMs,totalMs:performance.now()-t,hands:r.hands.length})}
+  const elapsed=performance.now()-start;out.textContent=JSON.stringify({input:'blank canvas, no hands or people',delegate:client.delegate,warning:client.warning,renderFps:renders*1000/elapsed,inferenceFps:samples.length*1000/elapsed,samples},null,2);
+}catch(error){out.textContent=String(error)}finally{active=false;client.close()}
+</script></body></html>

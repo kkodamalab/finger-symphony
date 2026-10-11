@@ -1,6 +1,7 @@
 import './reach.css';
 import {CameraSession,displayPointForCamera} from '../input/camera';
-import {DuoLandmarker,IdentityTracker,type DuoFrame,type Point,type Side} from '../tracking/duo';
+import {IdentityTracker,type DuoFrame,type Point,type Side} from '../tracking/duo';
+import {DuoClient} from '../tracking/duo-client';
 import {defaults,RhythmGame,validate,type Cursor,type Settings} from './game';
 import {RhythmAudio} from './audio';
 import {DemoInput} from './demo';
@@ -20,7 +21,7 @@ app.innerHTML=`<main class="reach-app">
     <div class="toolbar"><button id="camera-start">START CAMERA</button><button id="camera-stop">STOP CAMERA</button><button id="recover">RECOVER TRACKING</button><button id="recalibrate">再キャリブレーション</button></div>
     <section id="results" hidden aria-live="polite"></section>
     <section class="telemetry"><h2>SESSION DATA</h2><p id="recording-status">セッション開始後に記録します。入力源をsession.jsonとCSVに保存します。</p><div class="toolbar"><button id="save-tracking" disabled>tracking.csv</button><button id="save-events" disabled>events.csv</button><button id="save-session" disabled>session.json</button></div></section>
-    <section class="telemetry"><h2>LIVE TRACKING</h2><p id="tracking-info">0 PEOPLE · 0 HANDS · 0 FPS</p><div id="hands-info"></div><p id="camera-info">CAMERA: IDLE · TRACKING: IDLE</p></section>
+    <section class="telemetry"><h2>LIVE TRACKING</h2><p id="tracking-info">0 PEOPLE · 0 HANDS · 0 FPS</p><p id="inference-info">POSE / HAND: 未計測</p><div id="hands-info"></div><p id="calibration-progress">CALIBRATION PROGRESS 0%</p><p id="tracking-reason" role="status"></p><p id="camera-info">CAMERA: IDLE · TRACKING: IDLE</p></section>
   </section><aside>
     <fieldset id="session-settings"><legend>01 / SESSION</legend>
       ${select('input-source','入力源',['CAMERA','DEMO'])}
@@ -56,7 +57,7 @@ app.innerHTML=`<main class="reach-app">
 const $=<T extends HTMLElement>(id:string)=>document.getElementById(id) as T;
 const video=$<HTMLVideoElement>('reach-video'),canvas=$<HTMLCanvasElement>('reach-canvas'),ctx=canvas.getContext('2d')!;
 const value=(id:string)=>$(id) as HTMLInputElement;
-const model=new DuoLandmarker(),audio=new RhythmAudio();
+const model=new DuoClient(),audio=new RhythmAudio();
 const demoInput=new DemoInput();let recording:SessionRecording|undefined,lastDemoTime=0,lastRecordTime=0,soundedEvents=0;
 const synthetic=()=>value('input-source').value==='DEMO';
 let identity=new IdentityTracker(1),frame:DuoFrame|undefined,game:RhythmGame|undefined;
@@ -64,6 +65,7 @@ let playing=false,starting=false,trackingReady=false,recovering=false,mirror=tru
 let lastVideo=-1,lastInference=-Infinity,lastSuccess=0,fpsAt=performance.now(),renders=0,inferences=0,renderFps=0,trackingFps=0,inferenceMs=0;
 let cameraGeneration=0,recoveryAttempts=0,nextRecovery=0;
 let startGeneration=0;
+let poseMs:number|undefined,handMs:number|undefined,diagnosticError='',registrationResetAt=performance.now(),frameReceivedAt=0;
 const session=new CameraSession({
   video,
   requestStream:()=>navigator.mediaDevices.getUserMedia({video:{...(value('camera-device').value?{deviceId:{exact:value('camera-device').value}}:{}),width:{ideal:960},height:{ideal:540}},audio:false}),
@@ -71,7 +73,7 @@ const session=new CameraSession({
   onReport:report=>{
     $('camera-info').textContent=`CAMERA: ${report.camera} · TRACKING: ${report.tracking}${report.message?' · '+report.message:''}`;
     trackingReady=report.tracking==='READY';
-    if(trackingReady){lastSuccess=performance.now();recoveryAttempts=0}
+    if(trackingReady){lastSuccess=performance.now();registrationResetAt=lastSuccess;recoveryAttempts=0}
     if(report.camera==='ERROR'||report.tracking==='ERROR')message(report.message??'カメラまたはモデルを開始できませんでした。');
     if(report.camera==='IDLE')trackingReady=false;
   },
@@ -98,6 +100,7 @@ function resetRegistration(){
   if(playing||starting)endGame(false);
   identity=new IdentityTracker(value('player-count').value==='DUO'?2:1,mirror,value('player-count').value==='DUO'?'BOTH':value('active-hand').value as 'BOTH'|Side);
   frame=undefined;lastVideo=-1;game?.invalidate();$('results').hidden=true;
+  registrationResetAt=performance.now();frameReceivedAt=0;diagnosticError='';poseMs=undefined;handMs=undefined;inferences=0;trackingFps=0;
   $('calibration-help').textContent=identity.count===2?'画面左がP1、右がP2。2人とも両手を上げて1秒間保持してください。':identity.activeHand==='BOTH'?'両手を肩より高く上げて1秒間保持してください。':`${identity.activeHand==='L'?'左手':'右手'}を肩より高く上げて1秒間保持してください。`;
   message('キャリブレーション中。認識が安定するとSTARTが有効になります。');
   if(synthetic())message('DEMO INPUT — 実カメラではありません。STARTでカメラなし検証を開始できます。');
@@ -113,14 +116,14 @@ async function recover(){
   if(recovering||!session.active)return;
   recovering=true;trackingReady=false;frame=undefined;identity.reset();game?.invalidate();
   const generation=cameraGeneration;message('TRACKING: RECOVERING');
-  try{await model.init();if(generation===cameraGeneration&&session.active){trackingReady=true;lastSuccess=performance.now();lastVideo=-1;message('追跡を復旧しました。両手を上げて再登録してください。')}}
+  try{await model.init('CPU');if(generation===cameraGeneration&&session.active){trackingReady=true;lastSuccess=performance.now();registrationResetAt=lastSuccess;lastVideo=-1;message('CPUで追跡を復旧しました。両手を上げて再登録してください。')}}
   catch(error){if(generation===cameraGeneration)message(`追跡復旧に失敗: ${String(error)}。RECOVER TRACKINGで再試行できます。`)}
   finally{if(generation===cameraGeneration){recovering=false;nextRecovery=performance.now()+5000}}
 }
 function cursors():Cursor[]{return synthetic()?demoInput.cursors(playing&&game?game.settings:settings()):frame?.hands.filter(h=>h.points[8]).map(h=>({...displayPointForCamera(h.points[8],mirror),player:h.player,side:h.side,status:identity.calibrated?h.status:'UNCERTAIN'}))??[]}
 function currentReady(){
   if(synthetic())return true;
-  if(!frame||performance.now()-frame.timestamp>250||!identity.calibrated||!trackingReady)return false;
+  if(!frame||performance.now()-frame.timestamp>750||!identity.calibrated||!trackingReady||identity.needsRegistration)return false;
   return frame.players.length===identity.count&&frame.players.every(p=>p.status==='TRACKING')&&frame.hands.filter(h=>identity.activeHand==='BOTH'||h.side===identity.activeHand).every(h=>h.status==='TRACKING');
 }
 function lock(locked:boolean){$<HTMLFieldSetElement>('session-settings').disabled=locked;$<HTMLFieldSetElement>('game-settings').disabled=locked;value('mirror').disabled=locked;$<HTMLButtonElement>('end').disabled=!locked}
@@ -189,15 +192,15 @@ addEventListener('pagehide',()=>{stopCamera();audio.close()});
 document.addEventListener('visibilitychange',()=>{if(document.hidden){endGame(false);game?.invalidate()}});
 
 const colors={P1:'#59aaff',P2:'#ff637a'};
-function drawLine(points:Point[],chain:number[],color:string,w:number,h:number){
+function drawLine(points:Point[],chain:number[],color:string,w:number,h:number,pose=true){
   ctx.strokeStyle=color;ctx.lineWidth=2;ctx.beginPath();let first=true;
-  chain.forEach(i=>{const p=points[i];if(!p||(p.visibility??1)<.5){first=true;return}const q=displayPointForCamera(p,mirror);if(first)ctx.moveTo(q.x*w,q.y*h);else ctx.lineTo(q.x*w,q.y*h);first=false});ctx.stroke();
+  chain.forEach(i=>{const p=points[i];if(!p||(pose&&(p.visibility??1)<.5)){first=true;return}const q=displayPointForCamera(p,mirror);if(first)ctx.moveTo(q.x*w,q.y*h);else ctx.lineTo(q.x*w,q.y*h);first=false});ctx.stroke();
 }
 function draw(now:number){
   const w=canvas.clientWidth,h=canvas.clientHeight,dpr=devicePixelRatio;
   if(canvas.width!==Math.round(w*dpr)||canvas.height!==Math.round(h*dpr)){canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr)}
   ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);ctx.font='bold 13px system-ui';ctx.textAlign='center';
-  const fresh=frame&&performance.now()-frame.timestamp<250;
+  const fresh=frame&&performance.now()-frame.timestamp<750;
   if(fresh){
     for(const p of frame!.players){
       if(p.status!=='TRACKING')continue;
@@ -206,7 +209,7 @@ function draw(now:number){
     }
     for(const hand of frame!.hands){
       if(hand.status!=='TRACKING')continue;
-      if(value('hand-lines').checked)[[0,1,2,3,4],[0,5,6,7,8],[5,9,10,11,12],[9,13,14,15,16],[13,17,18,19,20],[17,0]].forEach(c=>drawLine(hand.points,c,colors[hand.player],w,h));
+      if(value('hand-lines').checked)[[0,1,2,3,4],[0,5,6,7,8],[5,9,10,11,12],[9,13,14,15,16],[13,17,18,19,20],[17,0]].forEach(c=>drawLine(hand.points,c,colors[hand.player],w,h,false));
     }
   }
   if(playing&&game){
@@ -230,14 +233,21 @@ function draw(now:number){
 let lastTelemetry=0;
 function telemetry(t:number){
   if(t-lastTelemetry<120)return;lastTelemetry=t;
-  const fresh=frame&&t-frame.timestamp<250;
+  const fresh=frame&&t-frame.timestamp<750;
   $('tracking-info').textContent=`${fresh?frame!.people:0} PEOPLE · ${fresh?frame!.handCount:0} HANDS · ${renderFps} RENDER FPS / ${trackingFps} TRACK FPS · ${inferenceMs.toFixed(0)}ms INFERENCE · ${model.delegate}`;
+  const measured=frameReceivedAt>0&&t-frameReceivedAt<1500;
+  $('inference-info').textContent=`POSE FPS ${measured?trackingFps:'—'} / HAND FPS ${measured?trackingFps:'—'} · INFERENCE TIME Pose ${poseMs?.toFixed(1)??'—'}ms / Hand ${handMs?.toFixed(1)??'—'}ms · HAND DETECTION COUNT ${measured?frame?.handCount??0:'—'} · ${model.busy?'IN FLIGHT (QUEUE 0)':'IDLE (QUEUE 0)'}`;
   $('hands-info').innerHTML=(['P1','P2'] as const).slice(0,identity.count).flatMap(player=>(['L','R'] as const).map(side=>{
     const hand=frame?.hands.find(h=>h.player===player&&h.side===side),point=hand?.points[8],q=point?displayPointForCamera(point,mirror):undefined;
-    return `<p class="${player.toLowerCase()}">${player}-${side} <b>${fresh?hand?.status??'LOST':'LOST'}</b> X ${fresh&&q?q.x.toFixed(3):'—'} / Y ${fresh&&q?q.y.toFixed(3):'—'}</p>`;
+    return `<p class="${player.toLowerCase()}">${player}-${side} <b>${fresh?hand?.status??'LOST':'LOST'}</b> X ${fresh&&q?q.x.toFixed(3):'—'} / Y ${fresh&&q?q.y.toFixed(3):'—'} · ${fresh?hand?.reason??'対応済み':'検出結果なし'}</p>`;
   })).join('');
   $('calibration-status').textContent=identity.needsRegistration?'ID不確定 — 再キャリブレーションしてください':currentReady()?'READY — 登録済み':identity.calibrated?'LOST / UNCERTAIN — HIT停止':'手を上げて登録中';
+  const calibration=identity.calibration(t),timedOut=!identity.calibrated&&session.active&&t-registrationResetAt>=10000;
+  $('calibration-progress').textContent=`CALIBRATION PROGRESS ${Math.round(calibration.progress*100)}% · HOLD ${identity.holdMs/1000}s${timedOut?' · 10秒以上未完了':''}`;
+  $('tracking-reason').textContent=[diagnosticError,model.warning,timedOut?'未完了の理由: '+calibration.reason:calibration.reason,frame?.handCount===0?'手を画面内に収め、明るい場所で指を開いてください。改善しなければRECOVER TRACKINGでCPUを試してください。':'',inferenceMs>250?'推論が250msを超えています。HITを停止します。':''].filter(Boolean).join(' / ');
+  if(timedOut)$('calibration-status').textContent='登録未完了 — '+calibration.reason;
   if(synthetic()){$('calibration-status').textContent='DEMO READY — カメラ登録なし';$('tracking-info').textContent=`DEMO INPUT · ${renderFps} FPS · 合成カーソル（実測の手・人数ではありません）`;$('hands-info').textContent=cursors().map(c=>`${c.player}-${c.side} X ${c.x.toFixed(3)} Y ${c.y.toFixed(3)}`).join(' / ')}
+  if(synthetic()){$('inference-info').textContent='POSE / HAND: DEMOでは実行しません';$('calibration-progress').textContent='CALIBRATION: DEMO（対象外）';$('tracking-reason').textContent=''}
   $('recording-status').textContent=recording?`${recording.metadata.input_source} · ${recording.tracking.length} tracking rows · ${game?.events.length??0} judged events`:'セッション開始後に記録します。';
   $<HTMLButtonElement>('play').disabled=playing||starting||!currentReady();
   const s=playing&&game?game.settings:settings();$('tempo').textContent=`${s.bpm} BPM`;
@@ -246,13 +256,13 @@ function telemetry(t:number){
 }
 function loop(t:number){
   if(synthetic()){demoInput.step(lastDemoTime?(t-lastDemoTime)/1000:0);lastDemoTime=t;if(playing&&game){const capture=performance.now();game.sample(cursors(),audio.at(capture),canvas.clientWidth/canvas.clientHeight,performance.timeOrigin+capture);recordTracking(capture)}}
-  // Only infer on new video frames. Capture the time before synchronous MediaPipe inference.
-  if(session.active&&trackingReady&&!recovering&&video.readyState>=2&&video.currentTime!==lastVideo&&t-lastInference>=50){
+  // Submit at most one new full-resolution frame. Results arrive without blocking rendering.
+  if(session.active&&trackingReady&&!recovering&&!model.busy&&video.readyState>=2&&video.currentTime!==lastVideo&&t-lastInference>=50){
     lastVideo=video.currentTime;lastInference=t;const capture=performance.now();
-    try{
-      const raw=model.detect(video,capture);
-      if(raw){
-        inferenceMs=performance.now()-capture;lastSuccess=performance.now();inferences++;
+    const generation=cameraGeneration;
+    void model.detect(video,capture).then(raw=>{
+      if(raw&&generation===cameraGeneration&&raw.timestamp>=registrationResetAt){
+        inferenceMs=performance.now()-capture;lastSuccess=performance.now();frameReceivedAt=lastSuccess;inferences++;poseMs=raw.poseMs;handMs=raw.handMs;
         frame=identity.update(raw);
         if(playing&&game){
           recordTracking(capture);
@@ -260,9 +270,9 @@ function loop(t:number){
           else game.invalidate();
         }
       }
-    }catch(error){trackingReady=false;frame=undefined;game?.invalidate();message(`推論エラー: ${String(error)}`);if(recoveryAttempts++<2)void recover()}
+    }).catch(error=>{if(generation!==cameraGeneration||capture<registrationResetAt)return;trackingReady=false;frame=undefined;game?.invalidate();diagnosticError=`推論エラー: ${String(error)}`;message(diagnosticError);if(recoveryAttempts++<2)void recover()});
   }
-  if(session.active&&!recovering&&performance.now()>nextRecovery&&lastSuccess&&performance.now()-lastSuccess>3000&&recoveryAttempts<2){recoveryAttempts++;void recover()}
+  if(session.active&&!recovering&&!model.busy&&performance.now()>nextRecovery&&lastSuccess&&performance.now()-lastSuccess>3000&&recoveryAttempts<2){recoveryAttempts++;diagnosticError='3秒間新しい推論結果がありません。CPUで再起動します。';void recover()}
   const now=audio.now();
   if(playing&&game){
     if(!synthetic()&&performance.now()-lastRecordTime>250)recordTracking(performance.now(),true);
@@ -270,7 +280,7 @@ function loop(t:number){
     if(!audio.running){endGame(false);message('音声が停止したためゲームを中断しました。')}
     else{
       // Allow one inference interval plus the configured capture delay before finalizing misses.
-      game.expire(now-Math.max(0,game.settings.latency)-100);
+      game.expire(now-Math.max(0,game.settings.latency)-(model.busy?Math.min(500,performance.now()-lastInference)+100:100));
       $('countdown').textContent=now<0?String(Math.min(3,Math.ceil(-now/1000))):now<600?'START':'';
       if(now>game.settings.duration*1000+game.settings.windows.good+400)endGame(true);
     }

@@ -18,6 +18,7 @@ const JUNGLE_PATTERNS=[
 
 /** Tone.js orchestration is independent from camera/body input. */
 export class MusicEngine{
+  private reachHits=[new Tone.PolySynth(Tone.Synth,{oscillator:{type:'sine'}}),new Tone.PolySynth(Tone.Synth,{oscillator:{type:'triangle'}})];
   private limiter=new Tone.Limiter(-2).toDestination();private master=new Tone.Gain(.8).connect(this.limiter);
   private melodyGain=new Tone.Gain(.7).connect(this.master);private harmonyGain=new Tone.Gain(.45).connect(this.master);private bassGain=new Tone.Gain(.5).connect(this.master);private drumGain=new Tone.Gain(.55).connect(this.master);
   private delay=new Tone.FeedbackDelay({delayTime:'8n',feedback:.25,wet:1}).connect(this.master);private delaySend=new Tone.Gain(0).connect(this.delay);private reverb=new Tone.Reverb({decay:4,wet:1}).connect(this.master);private reverbSend=new Tone.Gain(.08).connect(this.reverb);
@@ -28,7 +29,17 @@ export class MusicEngine{
   private wobbleGain=new Tone.Gain(.28).connect(this.bassGain);private wobbleDrive=new Tone.Distortion(.18).connect(this.wobbleGain);private wobble=new Tone.MonoSynth({oscillator:{type:'sawtooth'},filter:{type:'lowpass',Q:4,rolloff:-24},envelope:{attack:.03,decay:.2,sustain:.7,release:.25},filterEnvelope:{attack:.02,decay:.15,sustain:.4,release:.2,baseFrequency:100,octaves:3}}).connect(this.wobbleDrive);private wobbleLfo=new Tone.LFO({frequency:1,min:120,max:900}).connect(this.wobble.filter.frequency).start();
   private scheduled?:number;private chord?:HarmonyName;private chordKey='';private bank=0;private step=0;private enabled=false;private accompaniment=true;private wobbleActive=false;private junglePattern=0;
   mode:MusicMode='band';rhythm:Rhythm='8 beat';root='C';scale:ScaleName='major pentatonic';progression:ProgressionName='pop';experimental=false;quantize:'4n'|'8n'|'16n'|null='8n';bpm=100;
-  constructor(){this.melody.connect(this.delaySend);this.melody.connect(this.reverbSend);this.chords.forEach(x=>x.connect(this.reverbSend))}
+  constructor(){this.melody.connect(this.delaySend);this.melody.connect(this.reverbSend);this.chords.forEach(x=>x.connect(this.reverbSend));this.reachHits.forEach(x=>x.connect(this.master))}
+  /** Exclusive rhythm-session scheduling on Tone's existing context/transport. */
+  beginReach(mode:MusicMode,bpm:number,origin:number){
+    const transport=Tone.getTransport();transport.stop();this.setMode(mode);this.stopPattern();this.step=0;
+    transport.bpm.cancelScheduledValues(0);transport.bpm.value=bpm;this.bpm=bpm;transport.seconds=0;this.enabled=true;
+    this.scheduled=transport.scheduleRepeat(time=>{if(this.mode==='ambient'&&this.step%2===0)this.melody.triggerAttackRelease('C4',.15,time,.12);this.tick(time)},mode==='jungle'?'16n':'8n',0);
+    transport.start(origin);
+  }
+  reachVolume(volume:number,muted:boolean){this.master.gain.cancelScheduledValues(0);this.master.gain.setValueAtTime(muted?0:clamp01(volume),Tone.immediate())}
+  reachHit(player:'P1'|'P2',grade:string){if(this.enabled&&grade!=='MISS')this.reachHits[player==='P1'?0:1].triggerAttackRelease(player==='P1'?'E5':'C5',.1,Tone.now(),grade==='PERFECT'?.35:.2)}
+  stopReach(){this.enabled=false;this.stopPattern();Tone.getTransport().stop();this.stopVoices();this.reachHits.forEach(x=>x.releaseAll());this.reachVolume(0,true)}
   async setEnabled(on:boolean){if(on){await Tone.start();Tone.getTransport().start()}this.enabled=on;this.master.gain.rampTo(on ? .8 : 0,.12);if(!on)this.stopVoices()}
   setMode(mode:MusicMode){this.stopPattern();this.stopVoices();this.resetEffects();this.mode=mode;const config=MODES[mode];this.rhythm=config.rhythm;this.quantize=config.quantize;this.progression=mode==='ambient'?'ambient':mode==='dub'?'dub':'pop';const oscillator=mode==='techno'||mode==='dubstep'?'sawtooth':mode==='dub'?'square':'sine';this.melody.set({oscillator:{type:oscillator}});this.delaySend.gain.rampTo(mode==='dub'?.3:0,.25);this.reverbSend.gain.rampTo(mode==='ambient'?.45:.08,.35);this.setTempo(config.bpm);this.restartPattern()}
   setTempo(bpm:number){this.bpm=Math.round(Math.max(40,Math.min(180,bpm)));Tone.getTransport().bpm.rampTo(this.bpm,2)}
@@ -48,7 +59,7 @@ export class MusicEngine{
   setContinuous(edge:Edge,proximity:number,position:number){if(!this.enabled)return;if(this.mode==='ambient')this.reverbSend.gain.rampTo(.1+proximity*.55,.4);if(this.mode==='dub'&&edge==='right'){this.delaySend.gain.rampTo(proximity*.7,.25);this.delay.feedback.rampTo(Math.min(.62,.15+position*.45),.25)}if(this.mode==='dubstep'&&edge==='right')this.setGestureControl(position)}
   setCoordination(phase:number,stability:number,on=true){if(!this.enabled||!on)return;const name=harmonyForPhase(phase,this.chord),degree=PROGRESSIONS[this.progression][Math.floor(this.step/8)%PROGRESSIONS[this.progression].length],intervals=name==='maj7'?[0,4,7,11]:name==='sus'?[0,5,7,10]:[0,3,7,14],inversion=this.mode==='band'?Math.round(Math.abs(phase)/90):0,notes=intervals.map((n,i)=>this.noteFromSemitone(n+(i<inversion?12:0),3)),key=name+degree+this.root+this.mode;if(key!==this.chordKey){this.chords[this.bank].releaseAll(Tone.now()+.25);this.bank=1-this.bank;this.chords[this.bank].triggerAttack(notes,Tone.now()+.04,.28);this.chordKey=key;this.chord=name}const tension=1-stability;if(this.mode==='ambient')this.reverbSend.gain.rampTo(.2+tension*.5,.5);else if(this.mode==='techno')this.harmonyGain.gain.rampTo(.35+tension*.2,.4);else if(this.mode==='dub')this.delaySend.gain.rampTo(tension*.45,.4)}
   get harmonyName(){return this.chord?.toUpperCase()??'UNAVAILABLE'}
-  dispose(){this.stopPattern();this.stopVoices();this.wobbleLfo.stop()}
+  dispose(){this.stopReach();this.wobbleLfo.stop();[...this.reachHits,this.melody,...this.chords,this.bass,this.kick,this.noise,this.texture,this.theremin,this.wobble,this.wobbleLfo,this.wobbleDrive,this.wobbleGain,this.thereminGain,this.delaySend,this.reverbSend,this.delay,this.reverb,this.melodyGain,this.harmonyGain,this.bassGain,this.drumGain,this.master,this.limiter].forEach(node=>node.dispose())}
   private resetEffects(){this.delaySend.gain.rampTo(0,.08);this.reverbSend.gain.rampTo(.08,.08);this.delay.feedback.rampTo(.25,.08);this.wobbleDrive.distortion=.18}
   stopVoices(){this.melody.releaseAll();this.chords.forEach(x=>x.releaseAll());this.bass.triggerRelease();this.texture.triggerRelease();this.wobble.triggerRelease();this.wobbleActive=false;this.theremin.triggerRelease();this.thereminActive=false;this.thereminGain.gain.rampTo(0,.05);this.chordKey='';this.chord=undefined}
 }

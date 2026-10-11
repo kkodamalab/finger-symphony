@@ -1,4 +1,5 @@
 import {FilesetResolver, HandLandmarker, PoseLandmarker} from '@mediapipe/tasks-vision';
+import {CalibrationHold} from './calibration';
 
 export type Point = {x:number;y:number;z?:number;visibility?:number};
 export type PlayerId = 'P1'|'P2';
@@ -17,24 +18,28 @@ const bodyCost=(a:Point[],b:Point[])=>distance(center(a),center(b));
 /** IDs are assigned once in display space; uncertain observations never move an anchor. */
 export class IdentityTracker {
   players:Player[]=[];
-  private stableSince:number|undefined;
+  private holds:CalibrationHold[];
+  registeredPlayers:Player[]=[];
   private lastFrame=-Infinity;
   private beganAt:number|undefined;
-  progress=0;
+  get progress(){return Math.min(...this.holds.map(h=>h.elapsed/h.duration))}
   reason='カメラの検出結果を待っています';
-  readonly holdMs=1000;
-  calibrated=false;
+  get calibrated(){return this.holds.every(h=>h.complete)}
   needsRegistration=false;
-  constructor(public count:1|2=2,public mirrored=true,public activeHand:'BOTH'|Side='BOTH'){}
-  reset(){this.players=[];this.stableSince=undefined;this.lastFrame=-Infinity;this.beganAt=undefined;this.progress=0;this.reason='カメラの検出結果を待っています';this.calibrated=false;this.needsRegistration=false}
-  calibration(now:number){return {progress:this.calibrated?1:this.progress,timedOut:!this.calibrated&&this.beganAt!==undefined&&now-this.beganAt>=10000,reason:now-this.lastFrame>750?'新しい推論結果がありません':this.reason}}
+  constructor(public count:1|2=2,public mirrored=true,public activeHand:'BOTH'|Side='BOTH',readonly holdMs=1000){this.holds=Array.from({length:count},()=>new CalibrationHold(holdMs))}
+  reset(){this.players=[];this.registeredPlayers=[];this.holds=Array.from({length:this.count},()=>new CalibrationHold(this.holdMs));this.lastFrame=-Infinity;this.beganAt=undefined;this.reason='カメラの検出結果を待っています';this.needsRegistration=false}
+  calibration(now:number){this.holds.forEach(h=>h.expire(now));return {progress:this.progress,players:this.holds.map((h,i)=>({player:i===0?'P1':'P2',elapsed:h.elapsed,complete:h.complete})),timedOut:!this.calibrated&&this.beganAt!==undefined&&now-this.beganAt>=10000,reason:now-this.lastFrame>750?'新しい推論結果がありません':this.reason}}
+  trackingStatus(frame:DuoFrame|undefined,now:number,ready=true):'STABLE'|'UNSTABLE'|'LOST'{
+    if(!ready||!frame||now-frame.timestamp>750||frame.players.length!==this.count)return 'LOST';
+    const required=frame.hands.filter(h=>this.activeHand==='BOTH'||h.side===this.activeHand);
+    if(frame.players.some(p=>p.status==='LOST')||required.length!==this.count*(this.activeHand==='BOTH'?2:1)||required.some(h=>h.status==='LOST'))return 'LOST';
+    return this.needsRegistration||frame.players.some(p=>p.status!=='TRACKING')||required.some(h=>h.status!=='TRACKING')?'UNSTABLE':'STABLE';
+  }
   update(raw:RawFrame):DuoFrame {
     const t=raw.timestamp;
     this.beganAt??=t;
     const poses=raw.poses.filter(p=>visible(p[11])&&visible(p[12]));
-    // A healthy 4 FPS camera has ~250–300ms gaps. Retain continuous positive
-    // observations up to 750ms, but reset immediately on actual missing hands.
-    if(t-this.lastFrame>750)this.stableSince=undefined;
+    if(t<=this.lastFrame)return {players:this.players,hands:[],timestamp:t,people:raw.poses.length,handCount:raw.hands.length};
     this.lastFrame=t;
     if(!this.players.length&&poses.length===this.count){
       const ordered=[...poses].sort((a,b)=>(center(a).x-center(b).x)*(this.mirrored?-1:1));
@@ -55,7 +60,7 @@ export class IdentityTracker {
     // Once people overlap, geometry alone cannot tell whether they crossed or turned back.
     // Never silently relabel them when they separate on the opposite sides.
     if(ambiguous||overlap||this.players.some(p=>t-p.lastSeen>1500)){
-      this.needsRegistration=true;this.calibrated=false;
+      this.needsRegistration=true;
     }
     this.players=this.players.map((p,i)=>{
       const pose=poses[best.indices[i]];
@@ -73,18 +78,18 @@ export class IdentityTracker {
       if(first.d>.13){if(Number.isFinite(first.d))hands[first.i].reason=`Hand/Pose手首の距離 ${first.d.toFixed(3)} > 0.130`;return}
       const contested=candidates.some((r,j)=>j!==h&&r[0]?.i===first.i&&r[0].d<.13);
       if(contested||(rank[1]&&rank[1].d-first.d<.035)){hands[first.i].status='UNCERTAIN';hands[first.i].reason='複数の手／手首の対応が曖昧';return}
-      hands[first.i]={...hands[first.i],status:'TRACKING',points:raw.hands[h],confidence:slots[first.i].wrist.visibility};
+      hands[first.i]={...hands[first.i],status:'TRACKING',points:raw.hands[h],confidence:slots[first.i].wrist.visibility,reason:undefined};
     });
     const required=hands.filter(h=>this.activeHand==='BOTH'||h.side===this.activeHand);
-    const raised=this.players.length===this.count&&this.players.every(p=>p.status==='TRACKING')&&required.length===this.count*(this.activeHand==='BOTH'?2:1)&&required.every(h=>{
-      const p=this.players.find(p=>p.id===h.player)!;
-      return h.status==='TRACKING'&&h.points[0].y<p.pose[h.side==='L'?11:12].y-.03;
+    const raisedByPlayer=this.holds.map((hold,i)=>{
+      const p=this.players.find(p=>p.id===(i===0?'P1':'P2')),own=required.filter(h=>h.player===p?.id);
+      const raised=!!p&&p.status==='TRACKING'&&own.length===(this.activeHand==='BOTH'?2:1)&&own.every(h=>h.status==='TRACKING'&&h.points[0].y<p.pose[h.side==='L'?11:12].y-.03);
+      const wasComplete=hold.complete;hold.observe(raised,t);
+      if(!wasComplete&&hold.complete&&p)this.registeredPlayers.push({...p,pose:p.pose.map(point=>({...point}))});
+      return raised;
     });
-    if(!raised)this.stableSince=undefined;
-    else this.stableSince??=t;
-    this.progress=this.stableSince===undefined?0:Math.min(1,(t-this.stableSince)/this.holdMs);
-    if(this.progress===1)this.calibrated=true;
-    this.reason=this.needsRegistration?'人物ID不確定。再キャリブレーションしてください':this.players.length!==this.count?`${this.count}人の肩が見える位置に立ってください`:required.some(h=>h.status!=='TRACKING')?required.filter(h=>h.status!=='TRACKING').map(h=>`${h.player}-${h.side}: ${h.reason}`).join(' / '):!raised?'検出した手を肩より上げてください':this.calibrated?'登録完了':'手を上げたまま1秒間保持してください';
+    const raised=raisedByPlayer.every(Boolean);
+    this.reason=this.needsRegistration?'人物ID不確定。HIT停止。再キャリブレーションしてください':this.calibrated?'CALIBRATION COMPLETE':this.players.length!==this.count?`${this.count}人の肩が見える位置に立ってください`:required.some(h=>h.status!=='TRACKING')?required.filter(h=>h.status!=='TRACKING').map(h=>`${h.player}-${h.side}: ${h.reason}`).join(' / '):!raised?'検出した手を肩より上げてください':`有効検出時間を合計${this.holdMs/1000}秒保持してください`;
     return {players:this.players,hands,timestamp:t,people:raw.poses.length,handCount:raw.hands.length};
   }
 }

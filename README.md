@@ -100,6 +100,21 @@ EASY / NORMAL / HARDは拍の密度だけでなく移動幅を45% / 70% / 100%�
 
 A camera-optional musical playground for exploring how fingertip motion and bilateral coordination can control a future whole-body instrument. MediaPipe hand tracking, frame crossing, free/hybrid play, editable normalized performance frame, phase analysis, and the ten-second movement graph from v2 remain available.
 
+## Music Playground tracking / audio recovery
+
+Open `?view=playground`, click **START CAMERA**, and separately click **AUDIO ON** to unlock browser audio. Camera permission alone does not enable sound. The header reports HANDS, inference time, tracking errors/fallback warnings, AudioContext state, Transport state, requested master volume/mute and edge HIT count. The footer reports measured render and inference FPS. **RECOVER HANDS** retries on CPU; camera video remains independent of model initialization failures.
+
+Comparison with pre-PR #11 commit `a89bf45`: `src/tracking/hands.ts`, FaceTracker and dependency versions were unchanged. PR #11 added exclusive dynamic entry imports, Reach voices/methods, full engine disposal and pagehide cleanup. These additions did not reproduce a model failure in the blank-frame browser test. The following concrete defects were found and fixed without rolling back Reach:
+
+- `src/main.ts` called `drawHand()` before `draw()` cleared the canvas, erasing both skeletons. Gesture processing now runs only on new inference results, while skeletons render after clearing on every draw frame. Cached hands expire after 500ms; missing hands reset crossing/contact state and stop theremin.
+- `Hands.init()` previously had no initial GPU-to-CPU fallback. `recover()` first retried the failing GPU. Initial fallback, explicit CPU recovery, retained diagnostics, and cancellation of late initialization after stop/pagehide are now covered. Hand and Face WASM URLs match locked Tasks Vision 0.10.35 instead of moving `@latest`. Version drift is a preventive fix, not a reproduced cause on this device.
+- The old inference catch also covered gesture/audio/face processing, misclassifying those failures as Hand failures. Diagnostics now separate model inference and performance/audio errors. Automatic model recovery is bounded; manual retry remains available.
+- `MusicEngine.setEnabled()` overwrote user volume with 80% and could finish an asynchronous audio start after `dispose()`. It now preserves master volume/mute, cancels late starts, stops Transport/its pattern when disabled, and makes disposal idempotent. Reach entry points and its music API remain intact.
+
+Both views continue to navigate as separate documents; bootstrap imports only the chosen view. Pagehide stops camera/models/microphone/animation/audio, and a persisted pageshow reloads rather than reviving disposed engines. The user must click camera/audio controls again after returning. Runtime camera loss and physical BFCache/device recovery still require device testing.
+
+Development-only checks (not production entry points): `playground-smoke.local.html` runs real Hand initialization/inference on a blank image and a user-triggered Tone output-signal check. `playground-fixture.local.html` feeds clearly labeled synthetic Left/Right landmarks and a canvas stream through the real Playground UI to verify overlays and edge events. Neither proves real-hand detection. Browser validation found both synthetic skeletons, increasing HIT count, nonzero output RMS for all six genres and theremin, and zero RMS after master mute settled. Actual camera detection and physical speaker output were not available for verification; the exact cause of the reported device-specific total tracking loss remains unconfirmed.
+
 ## Start and validate
 
 ```bash

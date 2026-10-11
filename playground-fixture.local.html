@@ -1,0 +1,13 @@
+<!doctype html><meta charset="utf-8"><div id="app"></div>
+<script type="module">
+// Development-only integration fixture. No physical camera or model detections.
+import {Hands} from './src/tracking/hands.ts';
+const canvas=document.createElement('canvas');canvas.width=640;canvas.height=480;
+let active=true;const ctx=canvas.getContext('2d');function paint(){if(!active)return;ctx.fillStyle='#101820';ctx.fillRect(0,0,640,480);requestAnimationFrame(paint)}paint();
+navigator.mediaDevices.getUserMedia=async()=>canvas.captureStream(15);
+Hands.prototype.init=async function(){this.landmarker={close(){}}};
+Hands.prototype.detect=function(video,t){this.count=2;return ['Left','Right'].map((side,i)=>({side,points:Array.from({length:21},(_,n)=>({x:.35+i*.3+(n%4)*.012,y:.5+Math.sin(t/450+i)*.46+Math.floor(n/4)*.006,z:0}))}))};
+await import('./src/main.ts');
+const label=document.createElement('p');label.textContent='SYNTHETIC HANDS + CANVAS STREAM — NOT REAL CAMERA VALIDATION';label.style.color='orange';document.body.prepend(label);
+addEventListener('pagehide',()=>{active=false});
+</script>

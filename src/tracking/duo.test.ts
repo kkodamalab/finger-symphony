@@ -15,9 +15,9 @@ describe('duo identity and calibration',()=>{
     for(let t=0;t<=1200;t+=300){const input=raw(xs,t);input.hands.forEach(h=>h.forEach(p=>p.visibility=0));f=tracker.update(input)}
     expect(f!.hands.filter(h=>h.status==='TRACKING')).toHaveLength(count*2);expect(tracker.calibrated).toBe(true);
   });
-  it('shows partial progress at 4 FPS and resets on an actually missing hand',()=>{
+  it('shows partial progress at 4 FPS and pauses on a briefly missing hand',()=>{
     const tracker=new IdentityTracker(1);tracker.update(raw([.5],0));tracker.update(raw([.5],270));tracker.update(raw([.5],540));expect(tracker.progress).toBeCloseTo(.54);
-    const lost=raw([.5],810);lost.hands.pop();tracker.update(lost);expect(tracker.progress).toBe(0);expect(tracker.calibrated).toBe(false);
+    const lost=raw([.5],810);lost.hands.pop();tracker.update(lost);expect(tracker.progress).toBeCloseTo(.54);expect(tracker.calibrated).toBe(false);
     for(let t=1080;t<=2160;t+=270)tracker.update(raw([.5],t));expect(tracker.calibrated).toBe(true);
   });
   it('explains zero detections after ten seconds and fully clears progress on reset',()=>{
@@ -66,5 +66,24 @@ describe('duo identity and calibration',()=>{
   });
   it('supports selected-hand calibration without requiring the other hand',()=>{
     const tracker=new IdentityTracker(1,false,'L');for(let t=0;t<=1000;t+=100){const f=raw([.5],t);f.hands=f.hands.slice(0,1);tracker.update(f)}expect(tracker.calibrated).toBe(true);
+  });
+  it.each(['L','R','BOTH'] as const)('completes %s at one second with 3 FPS evidence and keeps completion after loss',side=>{
+    const tracker=new IdentityTracker(1,false,side);let frame;
+    for(const t of [0,333,666,1000]){const r=raw([.5],t);if(side!=='BOTH')r.hands=[r.hands[side==='L'?0:1]];frame=tracker.update(r)}
+    expect(tracker.calibrated).toBe(true);expect(tracker.trackingStatus(frame,1000)).toBe('STABLE');
+    const snapshot=structuredClone(tracker.registeredPlayers);const lost=raw([.5],1100);lost.hands=[];frame=tracker.update(lost);
+    expect(tracker.calibrated).toBe(true);expect(tracker.trackingStatus(frame,1100)).toBe('LOST');expect(tracker.registeredPlayers).toEqual(snapshot);
+    frame=tracker.update(raw([.5],1400));expect(tracker.trackingStatus(frame,1400)).toBe('STABLE');expect(tracker.trackingStatus(frame,2200)).toBe('LOST');
+    tracker.reset();expect(tracker.calibrated).toBe(false);expect(tracker.registeredPlayers).toEqual([]);
+  });
+  it('registers DUO independently and retains P1 while P2 starts later',()=>{
+    const tracker=new IdentityTracker(2,false);for(let t=0;t<=1000;t+=250){const r=raw([.25,.75],t);r.hands=r.hands.slice(0,2);tracker.update(r)}
+    expect(tracker.calibration(1000).players.map(p=>p.complete)).toEqual([true,false]);expect(tracker.calibrated).toBe(false);
+    for(let t=1250;t<=2250;t+=250){const r=raw([.25,.75],t);r.hands=r.hands.slice(2);tracker.update(r)}
+    expect(tracker.calibrated).toBe(true);expect(tracker.registeredPlayers).toHaveLength(2);
+  });
+  it('keeps registration complete but blocks HIT eligibility when DUO identity becomes uncertain',()=>{
+    const tracker=new IdentityTracker(2,false);for(let t=0;t<=1000;t+=250)tracker.update(raw([.35,.65],t));
+    const frame=tracker.update(raw([.46,.54],1250));expect(tracker.calibrated).toBe(true);expect(tracker.trackingStatus(frame,1250)).not.toBe('STABLE');
   });
 });

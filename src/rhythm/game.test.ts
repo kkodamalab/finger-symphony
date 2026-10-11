@@ -21,6 +21,12 @@ describe('entry and beat judgment',()=>{
   it('rejects stale outside evidence and repeated timestamps',()=>{
     const {game,n,cursor}=setup();game.sample([{...cursor,y:0}],n.time-300);game.sample([cursor],n.time);expect(n.grade).toBeUndefined();game.sample([{...cursor,y:0}],n.time);game.sample([cursor],n.time+1);expect(n.grade).toBeUndefined();
   });
+  it('suspends HIT through a tracking pause and resumes only with a fresh entry',()=>{
+    const {game,n,cursor}=setup();game.sample([{...cursor,y:0}],n.time-150);
+    game.invalidate(); // Camera is unstable or missing: never sample cached cursors.
+    game.sample([cursor],n.time);expect(n.grade).toBeUndefined();expect(game.scores.P1.score).toBe(0);
+    game.sample([{...cursor,y:0}],n.time+20);game.sample([cursor],n.time+60);expect(n.grade).toBe('PERFECT');
+  });
   it('does not allow one entry to hit multiple overlapping notes',()=>{
     const {game,n,cursor}=setup();game.notes.push({...n,id:999,hits:{}});game.sample([{...cursor,y:0}],n.time-40);game.sample([cursor],n.time);expect(game.scores.P1.counts.PERFECT).toBe(1);
   });

@@ -1,0 +1,24 @@
+<!doctype html><meta charset="utf-8"><title>Playground model smoke check</title>
+<h1>Real model / blank image — not camera validation</h1><pre id="result">Loading…</pre>
+<button id="audio-check">RUN AUDIO SIGNAL CHECK</button><pre id="audio-result">Not started (not speaker validation)</pre>
+<script type="module">
+import {Hands} from './src/tracking/hands.ts';
+import {MusicEngine} from './src/music/engine.ts';
+import * as Tone from 'tone';
+document.querySelector('#audio-check').onclick=async()=>{
+ const engine=new MusicEngine(),meter=new Tone.Analyser('waveform',2048),rows=[];
+ Tone.getDestination().connect(meter);
+ const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+ const rms=()=>{const a=meter.getValue();return Math.sqrt(a.reduce((sum,v)=>sum+v*v,0)/a.length)};
+ try{
+  await engine.setEnabled(true);engine.setAccompaniment(false);await wait(250);
+  for(const mode of ['band','techno','ambient','dub','dubstep','jungle']){engine.setMode(mode);engine.quantize=null;const note=engine.handleEdge({edge:'top',zone:2,velocity:.5,direction:'in'});await wait(180);const first=rms();await wait(80);rows.push({mode,note,rms:Math.max(first,rms())});await wait(350)}
+  engine.setTheremin(true,.5,.6);await wait(150);rows.push({theremin:rms()});engine.setTheremin(false);
+  engine.setVolumes(0,.7,.45);await wait(400);rows.push({muted:rms(),diagnostics:engine.diagnostics});
+  document.querySelector('#audio-result').textContent=JSON.stringify(rows,null,2);
+ }catch(error){document.querySelector('#audio-result').textContent=String(error)}finally{engine.dispose();Tone.getDestination().disconnect(meter);meter.dispose()}
+};
+const hands=new Hands(),out=document.querySelector('#result');
+try {await hands.init();const canvas=document.createElement('canvas');canvas.width=640;canvas.height=480;canvas.getContext('2d').fillRect(0,0,640,480);let start=performance.now();const result=hands.detect(canvas,start);out.textContent=JSON.stringify({delegate:hands.delegate,count:result?.length,ms:performance.now()-start});}
+catch(error){out.textContent=String(error)}finally{hands.close()}
+</script>

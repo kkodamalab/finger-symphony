@@ -1,0 +1,26 @@
+<!doctype html><meta charset="utf-8"><title>Sound Lab signal checks</title>
+<h1>Sound Lab — real Web Audio offline rendering</h1>
+<p>These checks measure audio buffers, not a physical speaker or camera.</p>
+<button id="run">RUN SIGNAL CHECKS</button><pre id="results">Not started</pre>
+<script type="module">
+import * as Tone from 'tone';
+import {LabVoice} from './src/sound-lab/audio.ts';
+import {presets} from './src/sound-lab/presets.ts';
+import {clone} from './src/sound-lab/types.ts';
+const out=document.querySelector('#results');
+document.querySelector('#run').onclick=async()=>{
+ document.querySelector('#run').disabled=true;const rows=[];
+ const render=async(p,stop=false)=>{let voice;try{const b=await Tone.Offline(()=>{voice=new LabVoice(p);voice.hit(p.category==='BASS'?36:60,.25,.05);if(stop)Tone.getTransport().scheduleOnce(()=>voice.stop(),.4);Tone.getTransport().start(0)},1.2,2,22050);return b.getChannelData(0).slice()}finally{voice?.dispose()}};
+ const rms=a=>Math.sqrt(a.reduce((s,v)=>s+v*v,0)/a.length);
+ const report=()=>{out.textContent=JSON.stringify(rows,null,2)};
+ try{
+  await Tone.start();
+  for(const p of presets){const data=await render(p),value=rms(data);rows.push({preset:p.name,rms:value,pass:Number.isFinite(value)&&value>1e-7});report()}
+  const base=clone(presets[12]);Object.assign(base.params,{reverb:0,chorus:0,delay:.1,feedback:0,attack:.01,decay:.2,release:.2,cutoff:2000,filterAmount:1,lfoDepth:.3,lfoRate:2,vibrato:0});
+  const reference=await render(base);
+  const changes={waveform:'square',detune:70,octave:1,mix:.9,attack:.4,decay:1,sustain:.9,release:1,filterType:'highpass',cutoff:300,resonance:8,filterAmount:3,lfoRate:8,lfoDepth:.8,lfoDestination:'pitch',vibrato:80,low:12,mid:-18,high:-18,threshold:-45,ratio:20,reverb:.7,delay:.4,feedback:.7,distortion:.7,chorus:.8,pan:.9};
+  for(const [parameter,value] of Object.entries(changes)){const p=clone(base);p.params[parameter]=value;const data=await render(p);const difference=Math.sqrt(data.reduce((sum,v,i)=>sum+(v-reference[i])**2,0)/data.length);rows.push({parameter,difference,pass:Number.isFinite(difference)&&difference>1e-7});report()}
+  const stopped=await render(base,true),tail=rms(stopped.slice(-2205));rows.push({stopTailRms:tail,pass:tail<1e-7});report();out.dataset.complete='true';out.dataset.passed=String(rows.every(r=>r.pass));
+ }catch(e){rows.push({error:String(e),stack:e.stack,pass:false});report()}finally{document.querySelector('#run').disabled=false}
+};
+</script>

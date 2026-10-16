@@ -1,5 +1,31 @@
 # Finger Symphony v3 — Music Playground
 
+## SOUND LAB — SIMPLE / DETAIL
+
+Music Playground (`?view=playground`) の **SOUND LAB** から音色を編集できます。開くとPlaygroundの音声を停止します。カメラ・手指判定の設定は変更しません。
+
+1. カテゴリーとプリセットを選び、**PREVIEW** で試聴します。DRUMSは単発、BASSは低音フレーズ、SYNTH / INSTRUMENTは短い音階、VOICEは短い発声音、FX / NATUREは単発音です。**STOP** または画面を閉じる操作で停止します。
+2. **SIMPLE** は日本語説明付きの0–100スライダーです。BRIGHTNESS → Cutoff、BODY → Low EQ / Oscillator Mix、ATTACK → Attack、LENGTH → Decay / Release、SPACE → Reverb Wet、CHARACTER → Distortionを変更します。各項目を選択時の初期値に戻せます。
+3. **DETAIL** はWaveform / Detune / Octave / Oscillator Mix、ADSR、Filter Type / Cutoff / Resonance / Envelope Amount、LFO Rate / Depth / Destination / Vibrato、3帯域EQ / Compressor、Reverb / Delay / Feedback / Distortion / Chorus / Panを編集できます。数値・単位・範囲・初期値を表示します。フィルター、ピッチ、パンからLFOの割当先を選べます。
+4. SIMPLE / DETAILは同じPresetStateを使います。切替だけでは値を変更しません。BODYとLENGTHは複数項目を上書きするため、DETAILで独立調整した後は必要なときだけ操作してください。**RESET** は選択した音色の状態へ戻します。
+5. 割当先を **LEFT HIT（左手） / RIGHT HIT（右手） / MELODY（上辺・FREE PLAY）** から選び、**APPLY TO PLAYGROUND** を押します。左手・右手はその手のHIT音を置き換え、MELODYは上辺・FREE PLAYの音を置き換えます。両方を割り当てた上辺HITでは重ねて鳴ります。割当を解除すると元のジャンル音に戻ります。CLOSE後、**AUDIO ON** で演奏を再開してください。
+6. 割当は現在のPlaygroundセッション内で保持し、ジャンル切替では消えません。ページ再読込後は保存した音色を再適用してください。BAND / TECHNO / AMBIENT / DUB / DUBSTEP / JUNGLE、THEREMIN、RHYTHM REACHは引き続き利用できます。
+7. 名前を入力して **SAVE AS** でユーザー音色として保存します。**MY PRESETS** から選び、再読み込み・名前変更・複製・削除ができます。標準音色は上書きしません。localStorageはこのブラウザー・オリジン内の保存なので、バックアップには **EXPORT JSON** を使ってください。**IMPORT JSON** は新しいユーザーIDで取り込みます。
+
+### 音源と制約
+
+- 初期プリセットは **29種類、すべてSYNTH版（SYNTH 29 / SAMPLE 0 / HYBRID 0）** です。DRUMS 8、BASS 4、SYNTH 5、VOICE 4、INSTRUMENT 4、FX / NATURE 4。Acoustic Snare / Vocal Ah / Piano等も録音ではなく合成音のイメージ名です。リアルな録音音源やFM方式を装った名称は使用していません。
+- ライセンス不明な録音素材は同梱していません。今回の公開版ではSAMPLE / HYBRIDは選択不可です。将来の録音素材追加用に音源方式、ローカル素材IDレジストリー、Playback Rate / Start Offset / Trim End / Reverse / Sample Gainの状態を分離して定義しています。実際の録音再生アダプターとライセンス確認済み素材は今後の追加対象です。未対応のSample Settingsは表示しません。
+- JSONにはschemaVersionを含み、ID・カテゴリー・音源方式・列挙値・有限数・各範囲・トリム順序を検証します。未登録のサンプルIDを拒否し、JSON中の任意URLは音源として使用しません。
+- 音声処理はTone.jsの既存コンテキストを利用し、プレビューはPlaygroundのTransportを変更しません。音色ごとに4音×2オシレーターまでのPolySynthとノイズ、専用エフェクト、Limiterを使用します。連続パラメーターには短いランプを適用し、停止・置換・画面離脱で音声と予約を解放します。PlaygroundのMaster / AUDIO OFFを経由するので割当音だけが鳴り続けることはありません。
+- `src/sound-lab/types.ts` / `presets.ts` / `mapping.ts` / `storage.ts` / `audio.ts` はUI・手指追跡から独立しています。`LabVoice.setParameters()` は将来の手の位置・距離・速度等からの変更にも利用できます。MOTION MAPPINGそのものは今回の対象外です。
+
+### 開発検証
+
+`npm test` と `npm run build` を実行してください。開発サーバー上の `sound-lab-check.local.html` は、実Web Audioのオフラインレンダリングで全29音色の非ゼロ出力、27パラメーターの波形変化、STOP後の無音を検証します。`sound-lab-ui.local.html` は390px / 1280pxの実iframeビューポートで表示・操作を確認するためのページです。これらの検証ページは本番ビルドのエントリーには含めません。
+
+実カメラによる追跡と実スピーカーの出音は未検証です。ブラウザー内の波形計測は実スピーカーでの聴感確認を代替しません。
+
 ## Phase 2 + 3: Duo Tracking / Rhythm Reach 2D
 
 The default page now opens **RHYTHM REACH 2D**. **MUSIC PLAYGROUND** opens the original application at `?view=playground`; its camera lifecycle and music controls are retained.

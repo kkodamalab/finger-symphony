@@ -1,0 +1,5 @@
+<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sound Lab responsive checks</title>
+<style>body{background:#182333;color:white;font:16px system-ui}iframe{border:1px solid #668399;height:840px}button{padding:12px}</style>
+<h1>Playground responsive fixture</h1><p>Real iframe viewport: <button data-width="390">390px PHONE</button> <button data-width="1280">1280px DESKTOP</button></p>
+<iframe title="Playground under test" src="./?view=playground" width="390"></iframe>
+<script>document.querySelectorAll('button').forEach(b=>b.onclick=()=>document.querySelector('iframe').width=b.dataset.width)</script>

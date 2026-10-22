@@ -1,0 +1,42 @@
+import {seamlessLoop} from './sample';
+import * as Tone from 'tone';
+import type {LayerSettings,Settings} from './settings';
+import {SCALES} from './settings';
+export interface Layer {configure(s:LayerSettings,settings:Settings):void;start(time:number):void;stop(time:number):void;tick(step:number,time:number):void;dispose():void;finished?():boolean}
+export class BassDroneLayer implements Layer{
+ private filter=new Tone.Filter(700,'lowpass');private pans=[new Tone.Panner(-.5),new Tone.Panner(.5),new Tone.Panner(0)];
+ private voices=[0,1,2].map(()=>new Tone.Synth({volume:-15,envelope:{attack:.2,decay:0,sustain:1,release:.5}}));private frequency=65;private mix=.3;
+ constructor(out:Tone.Gain){this.filter.connect(out);this.voices.forEach((v,i)=>v.chain(this.pans[i],this.filter))}
+ configure(s:LayerSettings,settings:Settings){this.frequency=Tone.Frequency(settings.root+s.octave).toFrequency();this.mix=s.sub;this.filter.frequency.rampTo(s.cutoff,.1);this.filter.Q.value=s.resonance;this.pans[0].pan.rampTo(-s.width,.1);this.pans[1].pan.rampTo(s.width,.1);this.voices.forEach((v,i)=>{v.set({oscillator:{type:i===2?'sine':s.preset==='Saw'?'sawtooth':s.preset==='Triangle'||s.preset==='Warm Drone'?'triangle':'sine'},envelope:{attack:s.attack,release:s.release},detune:i===0?-s.detune:i===1?s.detune:0});v.frequency.rampTo(this.frequency/(i===2?2:1),.1);v.volume.rampTo(i===2?Tone.gainToDb(Math.max(.0001,s.sub)*.18):-15,.1)})}
+ start(t:number){this.voices.forEach((v,i)=>v.triggerAttack(this.frequency/(i===2?2:1),t,i===2?this.mix:.7))}
+ stop(t:number){this.voices.forEach(v=>v.triggerRelease(t))}tick(){}
+ dispose(){[...this.voices,...this.pans,this.filter].forEach(n=>n.dispose())}
+}
+export class ArpeggioLayer implements Layer{
+ private synth=new Tone.PolySynth(Tone.Synth,{volume:-16,oscillator:{type:'triangle'},envelope:{attack:.02,decay:.1,sustain:.3,release:.2}});private s!:LayerSettings;private settings!:Settings;
+ constructor(out:Tone.Gain){this.synth.maxPolyphony=16;this.synth.connect(out)}
+ configure(s:LayerSettings,settings:Settings){this.s=s;this.settings=settings}
+ start(){}stop(t:number){this.synth.releaseAll(t)}
+ tick(step:number,time:number){const s=this.s,interval=16/s.division;if(step%interval)return;const n=Math.floor(step/interval),count=s.preset==='Custom'?s.steps.length:s.notes;let index=n%count;if(s.preset==='Descending')index=count-1-index;if(s.preset==='Up & Down'){const cycle=Math.max(1,count*2-2),k=n%cycle;index=k<count?k:cycle-k}if(s.preset==='Random')index=Math.floor(Math.random()*count);if(s.direction==='Reverse')index=count-1-index;const entry=s.steps[index%s.steps.length];if(!entry.on)return;const scale=SCALES[this.settings.scale],degree=index%(scale.length*s.octaves),offset=s.preset==='Custom'?entry.note:scale[degree%scale.length]+12*Math.floor(degree/scale.length);const midi=Tone.Frequency(this.settings.root+s.octave).toMidi()+offset,seconds=60/this.settings.bpm*4/s.division;this.synth.triggerAttackRelease(Tone.Frequency(midi,'midi').toFrequency(),Math.max(.02,seconds*s.gate),time+(n%2?seconds*s.swing:0),Math.max(.02,Math.min(1,entry.velocity*(1+(Math.random()-.5)*s.variation))))}
+ dispose(){this.synth.dispose()}
+}
+export class FieldRecordingLayer implements Layer{
+ private filter=new Tone.Filter(6000,'lowpass');private reverb=new Tone.Freeverb({roomSize:.7,wet:.2});private pan=new Tone.Panner(0);private noise=new Tone.Noise('pink');private noiseGain=new Tone.Gain(.2);private birds=new Tone.Synth({volume:-24,envelope:{attack:.02,decay:.1,sustain:0,release:.1}});private player=new Tone.GrainPlayer({loop:true,grainSize:.6,overlap:.3,volume:6});
+ private original?:AudioBuffer;private expectedEnd=Infinity;private ended=false;private s!:LayerSettings;private active=false;private disposed=false;private playingSample=false;sampleStatus='LOADING RAIN';
+ constructor(out:Tone.Gain){this.player.onstop=()=>{if(this.active&&this.playingSample&&!this.s.loop&&Tone.now()>=this.expectedEnd-.03)this.ended=true};this.noise.chain(this.noiseGain,this.filter);this.birds.connect(this.filter);this.player.connect(this.filter);this.filter.chain(this.reverb,this.pan,out);void this.player.buffer.load(import.meta.env.BASE_URL+'audio/drone/rain.ogg').then(()=>{if(!this.disposed){this.original=this.player.buffer.get()??undefined;this.prepare();this.sampleStatus='RAIN SAMPLE READY'}}).catch(()=>{if(!this.disposed)this.sampleStatus='SAMPLE FAILED · SYNTH FALLBACK'})}
+ finished(){return this.ended}
+ private prepare(){if(!this.original)return;if(!this.s.loop){this.player.buffer.set(this.original);return}const channels=Array.from({length:this.original.numberOfChannels},(_,i)=>seamlessLoop(this.original!.getChannelData(i),this.s.crossfade*this.original!.sampleRate));this.player.buffer.fromArray(channels)}
+ get source(){return (this.active?this.playingSample:this.s?.source==='SAMPLE'&&this.s.preset==='Rain'&&this.player.loaded)?'SAMPLE · Rain / Ove Melaa / CC0':'SYNTH · '+(this.s?.preset??'Rain')+(this.s?.source==='SAMPLE'?' (fallback)':'')}
+ configure(s:LayerSettings){const rebuild=!this.s||s.crossfade!==this.s.crossfade||s.loop!==this.s.loop;const restart=this.active&&this.s&&(s.source!==this.s.source||s.preset!==this.s.preset||s.rate!==this.s.rate||rebuild);if(restart)this.stop(Tone.now());this.s={...s};if(rebuild)this.prepare();this.filter.frequency.rampTo(s.cutoff,.1);this.reverb.wet.rampTo(s.reverb,.1);this.pan.pan.rampTo(s.pan,.1);this.player.playbackRate=s.rate;this.player.loop=s.loop;this.player.grainSize=s.crossfade*2;this.player.overlap=s.crossfade;this.noise.playbackRate=s.rate;this.noise.type=['Wind','Ocean','Traffic'].includes(s.preset)?'brown':s.preset==='Rain'?'white':'pink';if(restart)this.start(Tone.now()+.02)}
+ start(t:number){this.ended=false;this.active=true;this.playingSample=this.s.source==='SAMPLE'&&this.s.preset==='Rain'&&this.player.loaded;if(this.playingSample){this.expectedEnd=t+this.player.buffer.duration/this.s.rate;this.player.start(t)}else this.noise.start(t)}
+ stop(t:number){this.ended=false;this.active=false;this.noise.stop(t);this.player.stop(t);this.birds.triggerRelease(t)}
+ tick(step:number,time:number){if(!this.active||this.playingSample)return;const s=this.s;const nature=['Birds','Forest'].includes(s.preset);const urban=['Crowd','Street','Station','Cafe','Traffic'].includes(s.preset);const level=nature?.04:urban?.08:s.preset==='Waterfall'?.24:s.preset==='Rain'?.1:.17;this.noiseGain.gain.rampTo(level*(.65+.35*Math.sin(step*(s.preset==='Ocean'?.09:.23))),.12,time);if(nature&&step%(s.preset==='Forest'?11:7)===0){this.birds.frequency.setValueAtTime(1800+Math.random()*1800,time);this.birds.triggerAttackRelease(2200+Math.random()*1600,.08,time,.4)}if(urban){const intervals:Record<string,number>={Crowd:5,Street:11,Station:32,Cafe:13,Traffic:17};if(step%intervals[s.preset]===0)this.birds.triggerAttackRelease(s.preset==='Cafe'?1200+Math.random()*800:s.preset==='Station'?[440,554,659][Math.floor(step/32)%3]:s.preset==='Traffic'?80+Math.random()*90:150+Math.random()*500,s.preset==='Station'?.4:.12,time,.12)}}
+ dispose(){this.disposed=true;this.original=undefined;[this.noise,this.noiseGain,this.birds,this.player,this.filter,this.reverb,this.pan].forEach(n=>n.dispose())}
+}
+export class PercussionLayer implements Layer{
+ private kick=new Tone.MembraneSynth({volume:-18});private hat=new Tone.NoiseSynth({volume:-25,envelope:{attack:.001,decay:.04,sustain:0,release:.03}});private wood=new Tone.Synth({volume:-21,oscillator:{type:'sine'},envelope:{attack:.001,decay:.08,sustain:0,release:.03}});private s!:LayerSettings;private settings!:Settings;
+ constructor(out:Tone.Gain){[this.kick,this.hat,this.wood].forEach(n=>n.connect(out))}
+ configure(s:LayerSettings,settings:Settings){this.s=s;this.settings=settings;this.wood.oscillator.type=s.preset==='Metallic Percussion'?'square':'sine'}start(){}stop(t:number){this.kick.triggerRelease(t);this.hat.triggerRelease(t);this.wood.triggerRelease(t)}
+ tick(step:number,time:number){const s=this.s,entry=s.steps[step%s.steps.length];if(!entry.on||Math.random()>s.density)return;const t=time+(step%2?s.swing*60/this.settings.bpm/4:0)+Math.random()*s.humanize,v=entry.velocity*s.velocity,accent=step%(s.signature*4)===0?1:.8;if(entry.kit===0)this.kick.triggerAttackRelease('C1',.08,t,v*accent);if(entry.kit===1)this.hat.triggerAttackRelease(.03,t,v);if(entry.kit===2)this.wood.triggerAttackRelease(s.preset==='Dub Percussion'?'D4':s.preset==='Metallic Percussion'?'F#6':'G5',.05,t,v)}
+ dispose(){[this.kick,this.hat,this.wood].forEach(n=>n.dispose())}
+}

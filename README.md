@@ -198,3 +198,25 @@ Relative phase maps to voicing or genre-specific processing; coordination stabil
 ## Deployment
 
 Pushes to `main` are built by `.github/workflows/deploy.yml` and deployed to `https://kkodamalab.github.io/finger-symphony/`. Vite uses `/finger-symphony/` as its base path. Real camera, microphone, mobile touch, physical audio, network inputs, and browser autoplay behavior must be checked on an HTTPS device after deployment.
+
+## DRONE — 四辺で重ねるアンビエント演奏
+
+Music Playgroundで **DRONE → AUDIO ON** を選び、フレームの辺に指を触れます。一度触れるとON、指を離してもう一度触れるとOFF。カメラなしでは各カードの **BOTTOM / TOP / LEFT / RIGHT TEST** が同じトグルを実行します。4レイヤーは独立して同時に鳴らせます。
+
+| 辺 | 音楽レイヤー | プリセット |
+|---|---|---|
+| BOTTOM | 持続する低音・3オシレーター | Sine, Triangle, Saw, Sub Bass, Warm Drone, Dark Drone |
+| TOP | 共通BPMのアルペジオ | Ascending, Descending, Up & Down, Random, Custom |
+| LEFT | 環境音 | NATURE: Birds, Waterfall, Rain, Wind, Forest, Ocean / URBAN: Crowd, Street, Station, Cafe, Traffic |
+| RIGHT | 編集可能なリズム | Minimal Pulse, Ambient Percussion, Soft Kick, Shaker, Wood Block, Metallic Percussion, Polyrhythm, Dub Percussion |
+
+- **SIMPLE**: プリセット、音量、INFINITE / TIMED、Duration、Fade Out。**DETAIL**: Fade In、RETRIGGER、音源固有のパラメーターと4〜16ステップ編集。
+- **INFINITE**は再接触まで持続。**TIMED**はDuration（1〜128拍）の経過後にFade Out（0〜32拍）を開始し、終了時にOFFへ戻ります。Fade Inは0〜16拍です。秒数は共通BPMに追従します。
+- フェード中の再接触は **RESTART**（フェードを中断して再開）または **CANCEL**（停止）。通常の再接触／ALL OFFは設定したFade Outで停止、**PANIC STOP**は即時ミュートします。
+- TOPとRIGHTは同じTone Transportの16分音符グリッドに同期します。ScaleはMajor / Minor / Pentatonic / Dorian / Phrygian / Chromatic。Customは各ステップの半音オフセット、ON/OFF、Velocityを使用します。RIGHTは各ステップでKick / Shaker / Percを選べます。Time Signatureは四分音符単位の拍子（例: 3 = 3/4）のアクセントに使用し、Stepsが反復長を決めます。
+- LEFTの **SAMPLE / Rain** はOve Melaaの実録音（CC0）です。[出典・ライセンス](public/audio/drone/LICENSE.md)。その他は明示された **SYNTH** 近似音です。録音の取得／デコード失敗や未対応のSAMPLE選択でも合成環境音で演奏を継続できます。録音読込中に開始した合成音は、その演奏が終わるまで維持します。
+- Crossfadeは録音のグレイン重なりを調整し、ループ境界を滑らかにします。Rate、Loopは録音用、フィルター・Reverb・Panは両方式に適用します。
+- 接触距離／時間、Hand Frameを既存設定から使用します。全指・両手を辺単位で集約し、ヒステリシス、120msの解除確認、200ms以上のクールダウンを使用。追跡消失は解除扱いにせず、再び見えた指が離れたことを確認して再接触を許可します。追跡消失中もONの音は続きます。
+- DRONEへの出入りはAUDIO OFFに戻ります。再度AUDIO ONで演奏してください。カメラ停止は全レイヤーを即時停止、AUDIO OFF・画面終了はスケジュールも解放します。既存ジャンル間の切替、SOUND LAB、THEREMIN、RHYTHM REACHは従来どおりです。
+- 設定は専用localStorageキー `finger-symphony-drone-v1` に自動保存。**EXPORT JSON / IMPORT JSON**で全設定・ステップを移せます。再読込時は音のON状態を復元しません。SOUND LABのデータは変更しません。
+- 出力値は実際の音声信号レベルです。実カメラ・実スピーカー・長時間の実機連続運転は別途確認が必要です。自動テストでは接触、状態遷移、同時レイヤー、共通クロック、終了処理、1万拍でのノード／イベント数を検証します。

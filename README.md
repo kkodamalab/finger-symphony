@@ -2,7 +2,7 @@
 
 ## BODY CONTACT / DJ MIX / 分割DRONE
 
-Playground (`?view=playground`) の **SOLO / DJ MIX** で演奏レイアウトを選びます。START CAMERAとAUDIO ONは別操作です。デフォルトはSOLO、全身BODY CONTACTはカメラの推論結果から自動的に有効になり、HANDS / FULL BODYの切替は不要です。
+Playground (`?view=playground`) の **SOLO / DJ MIX** で演奏レイアウトを選びます。画面上部の **① BODY CONTACTを開始（カメラ）** → **② 音声を開始** の順に押します。従来のSTART CAMERAとAUDIO ONも同じ操作です。デフォルトはSOLO、全身BODY CONTACTはカメラの推論結果から自動的に有効になり、HANDS / FULL BODYの切替は不要です。
 
 ### 全身の接触判定
 

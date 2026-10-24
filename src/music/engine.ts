@@ -30,15 +30,15 @@ export class MusicEngine{
     if(next&&voice){this.labVoices[target]=voice;this.labPresets[target]=clone(next)}
   }
   getSound(target:Target){const p=this.labPresets[target];return p?clone(p):undefined}
-  private labHit(event:EdgeEvent){
+  private labHit(event:EdgeEvent,at?:number){
     const side=event.side==='Left'?'left':event.side==='Right'?'right':event.edge==='left'?'left':event.edge==='right'?'right':undefined;
     const hit=side?this.labVoices[side]:undefined,melody=event.edge==='top'?this.labVoices.melody:undefined;
     if(!hit&&!melody)return false;
-    const midi=Tone.Frequency(this.note(event.zone)).toMidi(),time=this.eventTime()??Tone.now();
+    const midi=Tone.Frequency(this.note(event.zone)).toMidi(),time=at??this.eventTime()??Tone.now();
     hit?.hit(midi,.15,time,event.velocity+.22);melody?.hit(midi,.3,time,event.velocity+.22);return true;
   }
   private reachHits=[new Tone.PolySynth(Tone.Synth,{oscillator:{type:'sine'}}),new Tone.PolySynth(Tone.Synth,{oscillator:{type:'triangle'}})];
-  private limiter=new Tone.Limiter(-2).toDestination();private master=new Tone.Gain(.8).connect(this.limiter);
+  private limiter=new Tone.Limiter(-2);private master=new Tone.Gain(.8).connect(this.limiter);
   private melodyGain=new Tone.Gain(.7).connect(this.master);private harmonyGain=new Tone.Gain(.45).connect(this.master);private bassGain=new Tone.Gain(.5).connect(this.master);private drumGain=new Tone.Gain(.55).connect(this.master);
   private delay=new Tone.FeedbackDelay({delayTime:'8n',feedback:.25,wet:1}).connect(this.master);private delaySend=new Tone.Gain(0).connect(this.delay);private reverb=new Tone.Reverb({decay:4,wet:1}).connect(this.master);private reverbSend=new Tone.Gain(.08).connect(this.reverb);
   private melody=new Tone.PolySynth(Tone.Synth).connect(this.melodyGain);private chords=[new Tone.PolySynth(Tone.Synth).connect(this.harmonyGain),new Tone.PolySynth(Tone.Synth).connect(this.harmonyGain)];
@@ -46,10 +46,10 @@ export class MusicEngine{
   private texture=new Tone.NoiseSynth({volume:-22,envelope:{attack:1,release:3}}).connect(this.reverb);
   private thereminGain=new Tone.Gain(0).connect(this.master);private theremin=new Tone.Synth({oscillator:{type:'sine'},envelope:{attack:.03,release:.12}}).connect(this.thereminGain);private thereminActive=false;
   private wobbleGain=new Tone.Gain(.28).connect(this.bassGain);private wobbleDrive=new Tone.Distortion(.18).connect(this.wobbleGain);private wobble=new Tone.MonoSynth({oscillator:{type:'sawtooth'},filter:{type:'lowpass',Q:4,rolloff:-24},envelope:{attack:.03,decay:.2,sustain:.7,release:.25},filterEnvelope:{attack:.02,decay:.15,sustain:.4,release:.2,baseFrequency:100,octaves:3}}).connect(this.wobbleDrive);private wobbleLfo=new Tone.LFO({frequency:1,min:120,max:900}).connect(this.wobble.filter.frequency).start();
-  private disposed=false;private enableGeneration=0;private masterVolume=.8;
+  private lastEdgeTime=-Infinity;private disposed=false;private enableGeneration=0;private masterVolume=.8;
   private scheduled?:number;private chord?:HarmonyName;private chordKey='';private bank=0;private step=0;private enabled=false;private accompaniment=true;private wobbleActive=false;private junglePattern=0;
   mode:MusicMode='band';rhythm:Rhythm='8 beat';root='C';scale:ScaleName='major pentatonic';progression:ProgressionName='pop';experimental=false;quantize:'4n'|'8n'|'16n'|null='8n';bpm=100;
-  constructor(){this.melody.connect(this.delaySend);this.melody.connect(this.reverbSend);this.chords.forEach(x=>x.connect(this.reverbSend));this.reachHits.forEach(x=>x.connect(this.master))}
+  constructor(private options:{output?:Tone.InputNode;sharedClock?:boolean}={}){if(options.output)this.limiter.connect(options.output);else this.limiter.toDestination();this.melody.connect(this.delaySend);this.melody.connect(this.reverbSend);this.chords.forEach(x=>x.connect(this.reverbSend));this.reachHits.forEach(x=>x.connect(this.master))}
   /** Exclusive rhythm-session scheduling on Tone's existing context/transport. */
   beginReach(mode:MusicMode,bpm:number,origin:number){
     const transport=Tone.getTransport();transport.stop();this.setMode(mode);this.stopPattern();this.step=0;
@@ -59,16 +59,16 @@ export class MusicEngine{
   }
   reachVolume(volume:number,muted:boolean){this.master.gain.cancelScheduledValues(0);this.master.gain.setValueAtTime(muted?0:clamp01(volume),Tone.immediate())}
   reachHit(player:'P1'|'P2',grade:string){if(this.enabled&&grade!=='MISS')this.reachHits[player==='P1'?0:1].triggerAttackRelease(player==='P1'?'E5':'C5',.1,Tone.now(),grade==='PERFECT'?.35:.2)}
-  stopReach(){this.enabled=false;this.stopPattern();Tone.getTransport().stop();this.stopVoices();this.reachHits.forEach(x=>x.releaseAll());this.reachVolume(0,true)}
+  stopReach(){this.enabled=false;this.stopPattern();if(!this.options.sharedClock)Tone.getTransport().stop();this.stopVoices();this.reachHits.forEach(x=>x.releaseAll());this.reachVolume(0,true)}
   async setEnabled(on:boolean){
     const generation=++this.enableGeneration;if(this.disposed)return;
     if(on){await Tone.start();if(this.disposed||generation!==this.enableGeneration)return;if(this.scheduled===undefined)this.restartPattern();Tone.getTransport().start()}
     this.enabled=on;this.master.gain.rampTo(on?this.masterVolume:0,.12);
-    if(!on){this.stopVoices();this.stopPattern();Tone.getTransport().stop()}
+    if(!on){this.stopVoices();this.stopPattern();if(!this.options.sharedClock)Tone.getTransport().stop()}
   }
   get diagnostics(){return {context:Tone.getContext().state,transport:Tone.getTransport().state,enabled:this.enabled,master:this.masterVolume,muted:!this.enabled||this.masterVolume===0,disposed:this.disposed}}
   setMode(mode:MusicMode){this.stopPattern();this.stopVoices();this.resetEffects();this.mode=mode;const config=MODES[mode];this.rhythm=config.rhythm;this.quantize=config.quantize;this.progression=mode==='ambient'?'ambient':mode==='dub'?'dub':'pop';const oscillator=mode==='techno'||mode==='dubstep'?'sawtooth':mode==='dub'?'square':'sine';this.melody.set({oscillator:{type:oscillator}});this.delaySend.gain.rampTo(mode==='dub'?.3:0,.25);this.reverbSend.gain.rampTo(mode==='ambient'?.45:.08,.35);this.setTempo(config.bpm);this.restartPattern()}
-  setTempo(bpm:number){this.bpm=Math.round(Math.max(40,Math.min(180,bpm)));Tone.getTransport().bpm.rampTo(this.bpm,2)}
+  setTempo(bpm:number){this.bpm=Math.round(Math.max(40,Math.min(180,bpm)));if(!this.options.sharedClock)Tone.getTransport().bpm.rampTo(this.bpm,2)}
   setAccompaniment(on:boolean){this.accompaniment=on;this.restartPattern()}
   setRhythm(rhythm:Rhythm){this.rhythm=rhythm;this.restartPattern()}
   setVolumes(master:number,melody:number,harmony:number){this.masterVolume=clamp01(master);this.master.gain.rampTo(this.enabled?this.masterVolume:0,.1);this.melodyGain.gain.rampTo(clamp01(melody),.1);this.harmonyGain.gain.rampTo(clamp01(harmony),.1)}
@@ -81,7 +81,7 @@ export class MusicEngine{
   private eventTime(){return this.quantize?Tone.getTransport().nextSubdivision(this.quantize):undefined}
   private noteFromSemitone(semitone:number,octave=4){return Tone.Frequency(Tone.Frequency(this.root+octave).toMidi()+semitone,'midi').toNote()}
   note(index:number){return this.noteFromSemitone(SCALES[this.scale][index%SCALES[this.scale].length]+12*Math.floor(index/SCALES[this.scale].length),3)}
-  handleEdge(event:EdgeEvent){if(!this.enabled)return'';if(this.labHit(event))return'SOUND LAB';const time=this.eventTime(),v=Math.min(.85,.22+event.velocity),degree=PROGRESSIONS[this.progression][Math.floor(this.step/8)%PROGRESSIONS[this.progression].length];if(this.mode==='dubstep'&&event.edge==='right'){this.setGestureControl((event.zone+1)/6);return'WOBBLE'}if(this.mode==='jungle'&&event.edge==='right'){this.junglePattern=(this.junglePattern+1)%4;return'BREAK '+(this.junglePattern+1)}if(event.edge==='bottom'){this.kick.triggerAttackRelease('C1','8n',time,v);const note=this.noteFromSemitone(melodicIndex(this.scale,degree,event.zone,this.experimental)-24);this.bass.triggerAttackRelease(note,this.mode==='dubstep'?'4n':'8n',time,v);return note}if(event.edge==='left'){this.noise.triggerAttackRelease(event.zone%2?'32n':'16n',time,v);if(this.mode==='ambient')this.texture.triggerAttackRelease(.8,time,v);return this.mode==='jungle'?'GHOST':'PERC'}if(event.edge==='right'){if(this.mode==='dub'){this.delay.feedback.rampTo(Math.min(.62,.18+event.zone*.07),.2);return'DELAY'}const chord=chordForDegree(this.scale,degree,this.experimental).map(x=>this.noteFromSemitone(x));this.melody.triggerAttackRelease(chord,'8n',time,v);return'CHORD'}const semitone=melodicIndex(this.scale,degree,event.zone+8,this.experimental),note=this.noteFromSemitone(semitone);this.melody.triggerAttackRelease(note,this.mode==='ambient'?'2n':this.mode==='jungle'?'32n':'8n',time,v);return note}
+  handleEdge(event:EdgeEvent,at?:number){if(!this.enabled)return'';const time=Math.max(at??this.eventTime()??Tone.now(),this.lastEdgeTime+.001);this.lastEdgeTime=time;if(this.labHit(event,time))return'SOUND LAB';const v=Math.min(.85,.22+event.velocity),degree=PROGRESSIONS[this.progression][Math.floor(this.step/8)%PROGRESSIONS[this.progression].length];if(this.mode==='dubstep'&&event.edge==='right'){this.setGestureControl((event.zone+1)/6);return'WOBBLE'}if(this.mode==='jungle'&&event.edge==='right'){this.junglePattern=(this.junglePattern+1)%4;return'BREAK '+(this.junglePattern+1)}if(event.edge==='bottom'){this.kick.triggerAttackRelease('C1','8n',time,v);const note=this.noteFromSemitone(melodicIndex(this.scale,degree,event.zone,this.experimental)-24);this.bass.triggerAttackRelease(note,this.mode==='dubstep'?'4n':'8n',time,v);return note}if(event.edge==='left'){this.noise.triggerAttackRelease(event.zone%2?'32n':'16n',time,v);if(this.mode==='ambient')this.texture.triggerAttackRelease(.8,time,v);return this.mode==='jungle'?'GHOST':'PERC'}if(event.edge==='right'){if(this.mode==='dub'){this.delay.feedback.rampTo(Math.min(.62,.18+event.zone*.07),.2);return'DELAY'}const chord=chordForDegree(this.scale,degree,this.experimental).map(x=>this.noteFromSemitone(x));this.melody.triggerAttackRelease(chord,'8n',time,v);return'CHORD'}const semitone=melodicIndex(this.scale,degree,event.zone+8,this.experimental),note=this.noteFromSemitone(semitone);this.melody.triggerAttackRelease(note,this.mode==='ambient'?'2n':this.mode==='jungle'?'32n':'8n',time,v);return note}
   setContinuous(edge:Edge,proximity:number,position:number){if(!this.enabled)return;if(this.mode==='ambient')this.reverbSend.gain.rampTo(.1+proximity*.55,.4);if(this.mode==='dub'&&edge==='right'){this.delaySend.gain.rampTo(proximity*.7,.25);this.delay.feedback.rampTo(Math.min(.62,.15+position*.45),.25)}if(this.mode==='dubstep'&&edge==='right')this.setGestureControl(position)}
   setCoordination(phase:number,stability:number,on=true){if(!this.enabled||!on)return;const name=harmonyForPhase(phase,this.chord),degree=PROGRESSIONS[this.progression][Math.floor(this.step/8)%PROGRESSIONS[this.progression].length],intervals=name==='maj7'?[0,4,7,11]:name==='sus'?[0,5,7,10]:[0,3,7,14],inversion=this.mode==='band'?Math.round(Math.abs(phase)/90):0,notes=intervals.map((n,i)=>this.noteFromSemitone(n+(i<inversion?12:0),3)),key=name+degree+this.root+this.mode;if(key!==this.chordKey){this.chords[this.bank].releaseAll(Tone.now()+.25);this.bank=1-this.bank;this.chords[this.bank].triggerAttack(notes,Tone.now()+.04,.28);this.chordKey=key;this.chord=name}const tension=1-stability;if(this.mode==='ambient')this.reverbSend.gain.rampTo(.2+tension*.5,.5);else if(this.mode==='techno')this.harmonyGain.gain.rampTo(.35+tension*.2,.4);else if(this.mode==='dub')this.delaySend.gain.rampTo(tension*.45,.4)}
   get harmonyName(){return this.chord?.toUpperCase()??'UNAVAILABLE'}

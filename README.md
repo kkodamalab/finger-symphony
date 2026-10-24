@@ -1,5 +1,72 @@
 # Finger Symphony v3 — Music Playground
 
+## BODY CONTACT / DJ MIX / 分割DRONE
+
+Playground (`?view=playground`) の **SOLO / DJ MIX** で演奏レイアウトを選びます。START CAMERAとAUDIO ONは別操作です。デフォルトはSOLO、全身BODY CONTACTはカメラの推論結果から自動的に有効になり、HANDS / FULL BODYの切替は不要です。
+
+### 全身の接触判定
+
+Poseの33点とHandsの各21点を使い、頭・肩・腕・肘・手首・手・胴体・腰・脚・膝・足の点、関節間の線分、肩と腰の四角形、手のひら等の近似領域をフレームの区画と照合します。**これは2D画像上の推定身体領域と演奏フレームの交差であり、実空間の物理的接触や、モデルが推定していない身体表面の正確な認識ではありません。** 遮蔽された関節を線分で補間せず、Poseの可視性が低い点は使用しません。カメラ画像と判定座標は同じ全画面座標です。
+
+- HANDSが0件でもPoseが有効なら演奏できます。両モデルは独立して初期化し、GPU失敗時はCPUへフォールバックします。RECOVER BODY / HANDSで再試行できます。
+- 接触イベントはtimestamp、deckId、edge、segmentIndex、contactId、bodyRegion、contactPosition、velocity、confidence、ENTER/HOLD/EXITを持ちます。信頼度は受理した推定点に基づく値であり、物理的接触の確率ではありません。
+- 同じデッキ・辺・区画の点／線分／PoseとHandsの重なりは1接触に集約します。異なる区画・デッキには同時に独立したイベントが発生します。
+- CONTACT DISTANCE / CONTACT TIME、ヒステリシス、最低200msのクールダウン、120msの離脱確認を使います。追跡喪失はEXITとせず、復帰後に実際に離れたことを確認するまで再ENTERを抑えます。長い更新間隔も同様です。
+- BAND / TECHNO / AMBIENT / DUB / DUBSTEP / JUNGLE / DRONEに適用します。SOLOの従来のFREE PLAY・ポインターデモ・手指のTHEREMIN・SOUND LABは維持しています。RHYTHM REACHは別エントリーのままです。
+- Poseは最大15Hzで推論コストに応じて間隔を延ばし、Handsは最大30Hz。同一動画フレームの再推論と古い結果の発音利用を防ぎます。
+
+### DRONEの1〜8分割
+
+SOLOは既存のEDGE SEGMENTS、DJ MIXは各デッキのSEGMENTSで指定します。四辺それぞれの各区画が独立したトグルです。ENTERでON/OFF、HOLD中は維持し、離脱後の再接触で再操作します。
+
+BOTTOMは低音、TOPはアルペジオ、LEFTは環境音、RIGHTはパーカッション。SOLOのEDIT SEGMENT、DJのDRONE SEGMENT SETTINGSで、辺・区画ごとに音色、TRANSPOSE（半音）、音量、INFINITE / TIMED、Duration、Fade In / Outを編集できます。TIMEDは指定拍数後にFade Outを開始します。分割数変更時は音声を停止し、安全に構成し直します。音声レイヤーは必要になった区画だけ追加し、減らした区画のノードは解放します。
+
+既存の `finger-symphony-drone-v1` を読み込みます。区画別データは新しい `finger-symphony-drone-segments-v2` に保存し、従来のSOUND LAB・フレーム設定キーは変更しません。DRONEのEXPORTはv2、IMPORTは従来v1とv2に対応します。保存されたON状態を自動再生することはありません。
+
+### DJ MIXとイベントルーパー
+
+左右のフレームがDECK A / Bです。**左手=A、右手=Bという割当はありません。** 身体のどの部分でも触れたフレームが演奏先になります。辺の番号はポインターでの演奏にも使えます。両デッキで7ジャンル、区画数、音色、音量、リバーブ量、ミュート、AUTO BACKINGを独立して指定できます。AUTO BACKINGは初期OFFで、選んだジャンルの既存伴奏を有効にします。
+
+両デッキは同じTone AudioContextとBPMを共有しますが、音声経路・所有するイベント・停止処理は分離されています。クロスフェーダーはEqual-Power方式（中央は各ゲイン約0.707、両端は片側のみ）です。操作後に保存するのは設定で、ループ録音は現在のページセッション内のデータです。
+
+| 操作 | 動作 |
+| --- | --- |
+| REC | そのデッキの録音を置換し、指定長の録音後に自動再生 |
+| PLAY | 保存されたイベントを先頭から再生 |
+| STOP | ループ再生とその持続音を停止。イベントは保持 |
+| OVERDUB | 既存イベントを保持して追加録音。もう一度押すと再生へ戻る |
+| CLEAR | 確認ダイアログで承諾した場合だけ、そのデッキのイベントを消去 |
+
+ループ長は1 / 2 / 4 / 8 / 16 / 32小節（4拍/小節）。録音対象はHIT、辺、区画、ジャンル、音色、ベロシティ、DRONE ON/OFFと持続時間です。音声そのものの録音ではありません。時刻は共有Transport上の拍で記録し、64分音符のグリッドで再生します。再生イベントを再録音せず、ライブ入力は再生中も利用できます。持続音は明示的なON/OFFとして扱い、ループ境界をまたぐ長さも管理します。1デッキ4096イベントを上限とし、長い停止からの復帰で過去のイベントを一括発音しません。ループ長や分割数を縮めると範囲外のイベントを除外します。
+
+### ジェスチャー操作
+
+GESTURESをONにして、フレーム下の**BODY CONTROL AREA**で操作します。演奏フレーム内の通常の手の形ではルーパー操作を発生させません。
+
+- 開いた手を保持：REC。拳を保持：PLAY / STOP。ピースを保持：OVERDUB。
+- 初期保持時間1000ms、設定範囲500〜3000ms。成立後は1800msのクールダウンがあり、同じ形を保持し続けても繰り返し実行しません。
+- 操作帯の表示上の左側はA、右側はB。対象デッキ、進捗、成立マークを表示します。
+- ピンチでフェーダーをつかみ、左右へ動かします。最初の手にロックし、ピンチ解除または追跡喪失で解除します。画面スライダーと同じ状態を更新します。
+- 操作対象の手・前腕は接触HITから除外します。Poseとの手首対応が一意なときは、同じ解剖学的な手に関連付けます。CLEARにはジェスチャーを設けません。
+
+AUDIO OFF / PANIC STOPは両デッキの録音・再生と発音を停止します。タブ非表示でもAUDIO OFFに戻ります。画面離脱でカメラ・モデル・音声ノード・スケジュールを解放します。スマホは横画面推奨ですが、縦画面でも設定とボタン操作ができます。
+
+### 検証と再実行
+
+`npm test` / `npm run check` / `npm run build` を実行してください。合成入力によるブラウザー検証は、開発サーバーの `body-contact-fixture.local.html` を使います。このページは本番ビルドのエントリーには含まれません。
+
+ChromiumとPlaywright Coreを利用できる環境で、開発サーバー起動後に以下を実行します（アプリの依存関係には追加不要）。
+
+```bash
+npm install --prefix /tmp/finger-browser-tools playwright-core@1.58.2
+NODE_PATH=/tmp/finger-browser-tools/node_modules node scripts/browser-check.cjs
+NODE_PATH=/tmp/finger-browser-tools/node_modules node scripts/gesture-check.cjs
+```
+
+`CHROMIUM_PATH`でブラウザーの実行パス、`FINGER_BASE_URL`で開発サーバーのベースURLを指定できます。既定のブラウザーは `/usr/bin/chromium`。波形による発音・ループ再生・クロスフェーダー端点・PANIC/AUDIO OFFの無音、合成身体入力、左右独立操作、OVERDUB、CLEAR確認、ジェスチャー、390px / 1280px幅を検証します。失敗時は非ゼロ終了します。PC/スマホ幅のスクリーンショットは一時ディレクトリに出力します。
+
+クラウドでは、実モデルの初期化と空画像推論、および合成入力からWeb Audioまでを確認しています。**実カメラでの全身追跡精度、実際の身体ジェスチャーの認識率、実スピーカーの音、スマホ実機の性能は未検証です。** 合成入力と音声波形の検証で実機検証を代替したとは扱いません。
+
 ## SOUND LAB — SIMPLE / DETAIL
 
 Music Playground (`?view=playground`) の **SOUND LAB** から音色を編集できます。開くとPlaygroundの音声を停止します。カメラ・手指判定の設定は変更しません。

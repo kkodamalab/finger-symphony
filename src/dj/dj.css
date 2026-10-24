@@ -242,3 +242,59 @@
   margin-top: 8px;
   overflow-wrap: anywhere;
 }
+
+#body-start-controls {
+  grid-column: 1/-1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid #41616f;
+  background: #101c2b;
+}
+#body-start-controls button {
+  min-height: 48px;
+  padding: 12px 16px;
+  border: 1px solid #79efff;
+  border-radius: 6px;
+  background: #9cecff;
+  color: #071522;
+  font: inherit;
+  cursor: pointer;
+}
+#body-start-controls button[aria-pressed="true"] {
+  background: #163c47;
+  color: #e9ffff;
+}
+#body-start-controls button:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+#body-start-controls p {
+  margin: 0;
+  color: #c1d5e4;
+  line-height: 1.7;
+}
+#body-start-controls :focus-visible {
+  outline: 3px solid #ffcc75;
+  outline-offset: 3px;
+}
+@media (max-width: 600px) {
+  #body-start-controls {
+    margin: 10px 0;
+  }
+  #body-start-controls button {
+    width: 100%;
+  }
+}
+#open-sound-lab {
+  grid-column: 1/-1;
+  justify-self: start;
+}
+body:not(.dj-mode) #controls {
+  grid-row: 6/8;
+}
+body.hide-ui #body-start-controls {
+  display: none;
+}

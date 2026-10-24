@@ -45,10 +45,21 @@ const assert = require("node:assert/strict");
         return max;
       });
     await pose(0.5, 0.5);
-    await page.locator("#start").click();
-    await page
-      .locator("body.dj-mode #dj-audio, body:not(.dj-mode) #audio")
-      .click();
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.locator("#body-camera").click();
+    await page.waitForFunction(
+      () =>
+        document.querySelector("#body-camera").getAttribute("aria-pressed") ===
+        "true",
+    );
+    await page.locator("#body-camera").click();
+    assert.equal(
+      await page.locator("#body-camera").getAttribute("aria-pressed"),
+      "false",
+    );
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.locator("#body-camera").click();
+    await page.locator("#body-audio").click();
     await page.waitForTimeout(300);
     await pose(0.35, 0.2);
     const solo = await rms();
@@ -195,13 +206,11 @@ const assert = require("node:assert/strict");
         banks: [defaults(), defaults(), defaults()],
       });
     });
-    await page
-      .locator("#drone-panel [data-import]")
-      .setInputFiles({
-        name: "segments.json",
-        mimeType: "application/json",
-        buffer: Buffer.from(imported),
-      });
+    await page.locator("#drone-panel [data-import]").setInputFiles({
+      name: "segments.json",
+      mimeType: "application/json",
+      buffer: Buffer.from(imported),
+    });
     await page.waitForFunction(
       () =>
         document.querySelector("#drone-panel [data-message]").textContent ===

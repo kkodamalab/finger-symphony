@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ja">
+  <meta charset="utf-8" /><meta
+    name="viewport"
+    content="width=device-width, initial-scale=1"
+  /><title>Body Contact synthetic integration fixture</title>
+  <div id="app"></div>
+  <script type="module">
+    // Explicit synthetic input fixture; never used by the production entry point.
+    import { Hands } from "./src/tracking/hands";
+    import { BodyPose } from "./src/body/pose";
+    import * as Tone from "tone";
+    const state = { pose: [], hands: [] };
+    const canvas = document.createElement("canvas");
+    canvas.width = 640;
+    canvas.height = 480;
+    const ctx = canvas.getContext("2d");
+    let running = true;
+    function draw() {
+      if (!running) return;
+      ctx.fillStyle = "#142132";
+      ctx.fillRect(0, 0, 640, 480);
+      requestAnimationFrame(draw);
+    }
+    draw();
+    navigator.mediaDevices.getUserMedia = async () => canvas.captureStream(15);
+    Hands.prototype.init = async function () {
+      this.landmarker = { close() {} };
+    };
+    Hands.prototype.detect = function () {
+      return state.hands;
+    };
+    BodyPose.prototype.init = async function () {
+      this.model = { close() {} };
+    };
+    BodyPose.prototype.detect = function () {
+      return state.pose;
+    };
+    await import("./src/main");
+    const meter = new Tone.Waveform(1024);
+    Tone.getDestination().connect(meter);
+    window.bodyFixture = { state, meter, Tone };
+    const label = document.createElement("p");
+    label.textContent =
+      "SYNTHETIC POSE / HANDS + CANVAS CAMERA — NOT PHYSICAL DEVICE VALIDATION";
+    document.body.prepend(label);
+    addEventListener("pagehide", () => {
+      running = false;
+      meter.dispose();
+    });
+  </script>
+</html>

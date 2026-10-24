@@ -1,0 +1,244 @@
+#performance-mode {
+  grid-column: 1/-1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+#performance-mode button,
+#dj-panel button,
+#dj-panel select,
+#dj-panel input[type="number"] {
+  background: #142334;
+  color: #effaff;
+  border: 1px solid #547487;
+  padding: 10px;
+  min-height: 44px;
+  border-radius: 5px;
+}
+#performance-mode button[aria-pressed="true"] {
+  background: #92eafa;
+  color: #081521;
+}
+#performance-mode span {
+  color: #b6c8d6;
+}
+#dj-panel {
+  grid-column: 1/-1;
+  min-width: 0;
+}
+#dj-panel[hidden],
+#dj-overlay[hidden] {
+  display: none;
+}
+.dj-mode #area,
+.dj-mode #modes,
+.dj-mode #drone-panel,
+.dj-mode #readouts {
+  display: none;
+}
+.dj-mode .stage {
+  grid-column: 1/-1;
+  height: min(62vh, 650px);
+}
+.dj-mode #controls {
+  grid-column: 1/-1;
+  grid-row: auto;
+  max-height: none;
+}
+.dj-mode #controls section:first-child label,
+.dj-mode #controls #auto,
+.dj-mode #controls #theremin,
+.dj-mode #controls #experimental {
+  display: none;
+}
+#dj-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+.dj-frame {
+  position: absolute;
+  border: 1px solid #6beaff;
+}
+.dj-frame > b {
+  position: absolute;
+  top: -24px;
+  color: white;
+  font-size: 11px;
+}
+.dj-frame[data-deck="B"] {
+  border-color: #ff8edb;
+}
+.dj-frame .edge {
+  pointer-events: auto;
+}
+.dj-frame .edge button {
+  padding: 0;
+  min-width: 0;
+  min-height: 0;
+  font-size: 9px;
+  color: #fff;
+  background: #163449;
+  border: 1px solid #68dcee;
+  flex: 1;
+  touch-action: manipulation;
+}
+.dj-frame .top button,
+.dj-frame .bottom button {
+  height: 24px;
+}
+.dj-frame .left button,
+.dj-frame .right button {
+  width: 24px;
+}
+.dj-frame button.active,
+.dj-frame button.sounding {
+  background: #36a690;
+  box-shadow: 0 0 14px #62ffe5;
+}
+.gesture-strip {
+  position: absolute;
+  top: 86%;
+  left: 5%;
+  right: 5%;
+  height: 12%;
+  border: 1px dashed #778b9b;
+  text-align: center;
+  padding: 12px;
+  font-size: 10px;
+  background: #08131b99;
+  color: #effaff;
+}
+.dj-global,
+.dj-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+}
+.dj-global {
+  padding: 12px;
+  background: #111c2b;
+}
+.dj-decks {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.dj-decks article {
+  text-align: left;
+  min-width: 0;
+}
+.dj-decks h2 {
+  font-size: 18px;
+  margin-bottom: 12px;
+  color: #a4f1ff;
+}
+.dj-decks article:last-child h2 {
+  color: #ffade7;
+}
+.dj-fields label {
+  min-width: 0;
+}
+.dj-fields select {
+  width: 100%;
+  min-width: 0;
+}
+#dj-panel input[type="checkbox"] {
+  width: 24px;
+  height: 24px;
+}
+.dj-buttons {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 14px 0;
+}
+.crossfader {
+  margin: 18px 0;
+  padding: 16px;
+  background: #152536;
+  text-align: center;
+  color: #e5faff;
+  font-size: 14px;
+}
+.crossfader input {
+  min-height: 44px;
+}
+#dj-panel p {
+  line-height: 1.8;
+  color: #bdd0df;
+}
+.dj-mode .stage video {
+  object-fit: fill;
+}
+.stage video {
+  object-fit: fill;
+}
+#dj-panel details {
+  margin-top: 12px;
+}
+#dj-panel summary {
+  padding: 10px;
+  cursor: pointer;
+}
+#dj-gesture-status {
+  color: #a1f3de;
+}
+#performance-mode :focus-visible,
+#dj-panel :focus-visible,
+.dj-frame :focus-visible {
+  outline: 3px solid #ffcc75;
+  outline-offset: 2px;
+}
+@media (max-width: 600px) {
+  .dj-decks {
+    grid-template-columns: 1fr;
+  }
+  .dj-mode .stage {
+    height: 48vh;
+    min-height: 280px;
+  }
+  .gesture-strip {
+    font-size: 8px;
+    padding: 5px;
+  }
+  .dj-frame > b {
+    font-size: 9px;
+  }
+  .dj-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  #dj-panel {
+    margin-top: 12px;
+  }
+}
+
+#area .edge span.sounding {
+  background: currentColor;
+  box-shadow: 0 0 18px currentColor;
+}
+
+.dj-mode #controls > section:nth-child(1),
+.dj-mode #controls > section:nth-child(2),
+.dj-mode #controls > section:nth-child(4),
+.dj-mode #controls > section:nth-child(5),
+.dj-mode #controls #theremin-readout,
+.dj-mode #controls #frame-status,
+.dj-mode #controls > section:nth-child(3) .button-row,
+.dj-mode #controls label:has(#edge-segments) {
+  display: none;
+}
+#dj-audio {
+  background: #a0f5ff !important;
+  color: #061017 !important;
+  font-weight: bold;
+}
+
+[data-hit-status] {
+  display: block;
+  color: #a8efde;
+  margin-top: 8px;
+  overflow-wrap: anywhere;
+}

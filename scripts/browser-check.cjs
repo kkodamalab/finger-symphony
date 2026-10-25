@@ -46,20 +46,17 @@ const assert = require("node:assert/strict");
       });
     await pose(0.5, 0.5);
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.locator("#body-camera").click();
-    await page.waitForFunction(
-      () =>
-        document.querySelector("#body-camera").getAttribute("aria-pressed") ===
-        "true",
+    await page.locator("#start").click();
+    await page.waitForFunction(() =>
+      document.querySelector("#camera-status").textContent.includes("READY"),
     );
-    await page.locator("#body-camera").click();
-    assert.equal(
-      await page.locator("#body-camera").getAttribute("aria-pressed"),
-      "false",
-    );
+    await page.locator("#settings-toggle").click();
+    await page.locator("#debug-settings summary").click();
+    await page.locator("#stop").click();
+    assert(await page.locator("#start").isVisible());
     await page.setViewportSize({ width: 1280, height: 900 });
-    await page.locator("#body-camera").click();
-    await page.locator("#body-audio").click();
+    await page.locator("#start").click();
+    await page.locator("#audio").click();
     await page.waitForTimeout(300);
     await pose(0.35, 0.2);
     const solo = await rms();

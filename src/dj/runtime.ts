@@ -65,6 +65,18 @@ export class Deck {
     }
     return m;
   }
+  get diagnostics() {
+    return {
+      engines: this.engines.size,
+      labVoices: this.sounds.size,
+      droneLayers: this.drone.diagnostics.active,
+      patterns: [...this.engines.values()].reduce(
+        (n, m) => n + m.activePatternCount,
+        0,
+      ),
+      droneSchedules: this.drone.diagnostics.schedules,
+    };
+  }
   get beat() {
     const t = Tone.getTransport();
     return t.ticks / t.PPQ;
@@ -97,7 +109,11 @@ export class Deck {
     for (const e of this.loop.events)
       if (e.genre !== "drone") this.engine(e.genre);
     await Promise.all([
-      this.drone.setEnabled(on),
+      this.drone.setEnabled(
+        on &&
+          (this.genre === "drone" ||
+            this.loop.events.some((e) => e.genre === "drone")),
+      ),
       ...[...this.engines.values()].map((m) => m.setEnabled(on)),
     ]);
     if (generation !== this.generation) return;
@@ -117,7 +133,17 @@ export class Deck {
     }
     this.genre = genre;
     this.setAccompaniment(this.accompaniment);
-    if (genre !== "drone") this.engine(genre);
+    if (this.enabled) {
+      if (genre !== "drone") this.engine(genre);
+      void this.drone.setEnabled(
+        genre === "drone" || this.loop.events.some((e) => e.genre === "drone"),
+      );
+    }
+    for (const [mode, engine] of this.engines)
+      if (mode !== genre && !this.loop.events.some((e) => e.genre === mode)) {
+        engine.dispose();
+        this.engines.delete(mode);
+      }
   }
   setSegments(n: number) {
     this.loop.stop();
@@ -255,6 +281,13 @@ export class DJAudio {
   enabled = false;
   private schedule?: number;
   private generation = 0;
+  get diagnostics() {
+    return {
+      looperSchedules: this.schedule === undefined ? 0 : 1,
+      A: this.A.diagnostics,
+      B: this.B.diagnostics,
+    };
+  }
   setMix() {
     const [a, b] = equalPower(this.fade);
     this.A.mix(a);
@@ -283,15 +316,27 @@ export class DJAudio {
     if (on) {
       this.setTempo(this.bpm);
       const t = Tone.getTransport();
-      if (this.schedule === undefined)
-        this.schedule = t.scheduleRepeat((time) => {
-          const beat = t.getTicksAtTime(time) / t.PPQ;
-          this.A.tick(beat, time);
-          this.B.tick(beat, time);
-        }, "64n");
+      this.syncLoopClock();
       t.start();
     }
     this.setMix();
+  }
+  syncLoopClock() {
+    const t = Tone.getTransport(),
+      needed =
+        this.enabled &&
+        [this.A, this.B].some((d) => d.loop.state !== "STOPPED");
+    if (!needed) {
+      if (this.schedule !== undefined) t.clear(this.schedule);
+      this.schedule = undefined;
+      return;
+    }
+    if (this.schedule === undefined)
+      this.schedule = t.scheduleRepeat((time) => {
+        const beat = t.getTicksAtTime(time) / t.PPQ;
+        this.A.tick(beat, time);
+        this.B.tick(beat, time);
+      }, "64n");
   }
   panic() {
     this.A.panic();

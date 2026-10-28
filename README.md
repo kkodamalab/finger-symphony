@@ -2,7 +2,7 @@
 
 ## BODY CONTACT / DJ MIX / 分割DRONE
 
-Playground (`?view=playground`) の **SOLO / DJ MIX** で演奏レイアウトを選びます。**START CAMERA** → **AUDIO ON** の順に押します。スマートフォンでは **SETTINGS** で詳細設定を開けます。DEBUG / FRAME 内の **HAND SKELETON SETTINGS** で手の点・線・色・透明度を調整できます（自動保存、RESET DEFAULTSで初期化）。Poseの身体輪郭は描画しません。下部の7パネルは初期非表示で、**SHOW PERFORMANCE DIAGNOSTICS** から表示できます。デフォルトはSOLO、全身BODY CONTACTはカメラの推論結果から自動的に有効になり、HANDS / FULL BODYの切替は不要です。
+Playground (`?view=playground`) の **SOLO / DJ MIX** で演奏レイアウトを選びます。**START CAMERA** → **AUDIO: OFF · START** の順に押します。スマートフォンでは **SETTINGS** で詳細設定を開けます。DEBUG / FRAME 内の **HAND SKELETON SETTINGS** で手の点・線・色・透明度を調整できます（自動保存、RESET DEFAULTSで初期化）。Poseの身体輪郭は描画しません。下部の7パネルは初期非表示で、**SHOW PERFORMANCE DIAGNOSTICS** から表示できます。デフォルトはSOLO / HANDS ONLY / BALANCEDです。全身演奏には **PERFORMANCE SETTINGS → TRACKING ENGINE → BODY CONTACT** を選びます。HANDS ONLYではPoseモデルを起動しません。品質はQUALITY / BALANCED / LIGHTから選択でき、設定を保存します。DEBUGのPERFORMANCE DIAGNOSTICSには実測FPS・推論時間・音声状態を表示し、COPY DIAGNOSTICSでコピーできます。設定トグルは現在のON/OFFを文字・ノブ・色で表示します。詳細な設定値、検証結果、制限は [performance-validation.md](docs/performance-validation.md) を参照してください。
 
 ### 全身の接触判定
 

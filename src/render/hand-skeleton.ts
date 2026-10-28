@@ -1,3 +1,4 @@
+import { syncToggleInputs } from "../ui/toggle";
 import type { Hand } from "../tracking/hands";
 import type { Point } from "../performance/frame";
 export const DEFAULTS = {
@@ -51,7 +52,7 @@ export function mountSkeleton(parent: HTMLElement): SkeletonSettings {
       "",
     )}<label>Left Hand Color<input type="color" data-skeleton="leftColor"></label><label>Right Hand Color<input type="color" data-skeleton="rightColor"></label><button type="button" id="reset-skeleton">RESET DEFAULTS</button>`;
   parent.append(panel);
-  const sync = () =>
+  const sync = () => {
     panel
       .querySelectorAll<HTMLInputElement>("[data-skeleton]")
       .forEach((input) => {
@@ -65,6 +66,8 @@ export function mountSkeleton(parent: HTMLElement): SkeletonSettings {
               ? Math.round(Number(value) * 100) + "%"
               : value + "px";
       });
+    syncToggleInputs(panel);
+  };
   const save = () => {
     try {
       localStorage.setItem(KEY, JSON.stringify(settings));

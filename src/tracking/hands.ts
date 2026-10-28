@@ -11,7 +11,7 @@ export class Hands {
   private generation=0;
   private vision?:Awaited<ReturnType<typeof FilesetResolver.forVisionTasks>>;
   private lastDetectAt=0;
-  private readonly intervalMs=1000/30;
+  maxFps=30;
 
   async init(delegate:'GPU'|'CPU'='GPU'){
     this.close();
@@ -30,7 +30,7 @@ export class Hands {
   }
 
   detect(video:HTMLVideoElement,t:number):Hand[]|undefined{
-    if(!this.landmarker||t-this.lastDetectAt<this.intervalMs)return undefined;
+    if(!this.landmarker||t-this.lastDetectAt<1000/this.maxFps-0.5)return undefined;
     this.lastDetectAt=t;
     const start=performance.now();
     try{

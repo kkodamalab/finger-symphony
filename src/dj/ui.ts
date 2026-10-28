@@ -1,3 +1,4 @@
+import { syncAudioButton } from "../ui/toggle";
 import { DJAudio, type Genre } from "./runtime";
 import { BodyGestures } from "./gestures";
 import type { Hand } from "../tracking/hands";
@@ -208,6 +209,7 @@ export function mountDJ(stage: HTMLElement, onMode: (on: boolean) => void) {
             if (key === "muted") d.muted = (el as HTMLInputElement).checked;
             if (key === "bars") d.loop.setBars(+el.value);
             audio.setMix();
+            audio.syncLoopClock();
             frames();
             save();
           }),
@@ -246,19 +248,19 @@ export function mountDJ(stage: HTMLElement, onMode: (on: boolean) => void) {
       document.querySelector<HTMLButtonElement>("#audio")!.click();
     panel.querySelector<HTMLButtonElement>("#dj-panic")!.onclick = () => {
       audio.panic();
-      document.querySelector("#audio-status")!.textContent = "AUDIO: OFF";
-      document.querySelector<HTMLButtonElement>("#audio")!.textContent =
-        "AUDIO ON";
+      window.dispatchEvent(new Event("playground-panic"));
     };
   }
   function command(id: "A" | "B", action: string) {
     const d = audio[id];
     if (action === "CLEAR") {
       if (confirm(`DECK ${id} のループを消去しますか？`)) d.loop.clear();
+      audio.syncLoopClock();
       return;
     }
     if (action === "STOP") {
       d.loop.stop();
+      audio.syncLoopClock();
       return;
     }
     if (!audio.enabled) {
@@ -273,6 +275,7 @@ export function mountDJ(stage: HTMLElement, onMode: (on: boolean) => void) {
       if (d.loop.state === "STOPPED") d.loop.play(d.beat);
       else d.loop.stop();
     }
+    audio.syncLoopClock();
   }
   function fade(value: number) {
     audio.fade = value;
@@ -320,9 +323,7 @@ export function mountDJ(stage: HTMLElement, onMode: (on: boolean) => void) {
   frames();
   const timer = setInterval(() => {
     if (!active) return;
-    panel.querySelector("#dj-audio")!.textContent = audio.enabled
-      ? "AUDIO OFF"
-      : "AUDIO ON";
+    syncAudioButton(panel.querySelector<HTMLButtonElement>("#dj-audio")!);
     for (const id of ["A", "B"] as const) {
       const d = audio[id];
       panel.querySelector(

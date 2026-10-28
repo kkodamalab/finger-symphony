@@ -18,6 +18,7 @@ const assert = require("node:assert/strict");
     page.on("pageerror", (e) => errors.push(String(e)));
     await page.goto(new URL("body-contact-fixture.local.html", base).href);
     await page.waitForFunction(() => window.bodyFixture);
+    await page.locator("#tracking-engine").selectOption("body");
     const pose = async (x, y) =>
       page.evaluate(
         ({ x, y }) => {
@@ -48,7 +49,7 @@ const assert = require("node:assert/strict");
     await page.setViewportSize({ width: 390, height: 844 });
     await page.locator("#start").click();
     await page.waitForFunction(() =>
-      document.querySelector("#camera-status").textContent.includes("READY"),
+      document.querySelector("#camera-status").textContent.includes("ON"),
     );
     await page.locator("#settings-toggle").click();
     await page.locator("#debug-settings summary").click();
@@ -105,6 +106,8 @@ const assert = require("node:assert/strict");
     );
     console.log("DJ head RMS", mix);
     await a.locator("[data-action=STOP]").click();
+    await page.locator('#debug-settings').evaluate(e=>e.open=true);
+    await page.waitForFunction(()=>document.querySelector('#performance-diagnostics').textContent.includes('LOOPER SCHEDULE COUNT 0'));
     await pose(0.5, 0.5);
     await page.locator("#dj-audio").click();
     await page.waitForTimeout(200);

@@ -20,6 +20,8 @@ export class CameraSession{
   private stream?:MediaStream;private pending?:Promise<void>;private generation=0;private visible=true;private mirrored=true;
   constructor(private options:CameraSessionOptions){}
   get active(){return Boolean(this.stream)}
+  async applyConstraints(constraints:MediaTrackConstraints){const stream=this.stream,track=stream?.getVideoTracks()[0];if(!track?.applyConstraints)return false;try{await track.applyConstraints(constraints);return stream===this.stream}catch{return false}}
+  get resolution(){const track=this.stream?.getVideoTracks()[0];const settings=track?.getSettings?.();return settings?.width&&settings?.height?`${settings.width} × ${settings.height}`:this.options.video.videoWidth?`${this.options.video.videoWidth} × ${this.options.video.videoHeight}`:'N/A'}
   setPresentation(visible:boolean,mirrored=this.mirrored){this.visible=visible;this.mirrored=mirrored;setCameraPresentation(this.options.video,visible,mirrored)}
   start(front:boolean){
     if(this.pending)return this.pending;
@@ -33,9 +35,9 @@ export class CameraSession{
     try{
       const stream=await this.options.requestStream(front);
       if(generation!==this.generation){stream.getTracks().forEach(track=>track.stop());return}
-      this.stream=stream;this.options.video.srcObject=stream;this.setPresentation(this.visible,front);
+      this.stream=stream;for(const track of stream.getTracks())track.addEventListener?.('ended',()=>{if(generation===this.generation&&this.stream===stream){this.stop();this.options.onReport({camera:'ERROR',tracking:'IDLE',message:'Camera stream ended; press START CAMERA to retry'})}},{once:true});this.options.video.srcObject=stream;this.setPresentation(this.visible,front);
       await this.options.video.play();
-      if(generation!==this.generation){this.releaseStream();return}
+      if(generation!==this.generation){stream.getTracks().forEach(track=>track.stop());return}
       this.options.onReport({camera:'READY',tracking:'LOADING'});this.options.onCameraReady();
       try{await this.options.initializeTracking();if(generation===this.generation)this.options.onReport({camera:'READY',tracking:'READY'})}
       catch(error){if(generation===this.generation)this.options.onReport({camera:'READY',tracking:'ERROR',message:errorMessage(error)})}

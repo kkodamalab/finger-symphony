@@ -17,3 +17,5 @@ describe('Playground engine isolation and audio controls',()=>{
 });
 
 it('shared-clock deck disable/dispose never stops the other deck transport',async()=>{const a=new MusicEngine({sharedClock:true}),b=new MusicEngine({sharedClock:true});await a.setEnabled(true);await b.setEnabled(true);f.transport.stop.mockClear();await a.setEnabled(false);a.dispose();expect(f.transport.stop).not.toHaveBeenCalled();expect(b.handleEdge({edge:'top',zone:0,velocity:.6,direction:'in'})).not.toBe('');b.dispose()});
+
+it('does not reserve accompaniment events while audio is off',async()=>{const m=new MusicEngine();m.setMode('jungle');m.setAccompaniment(true);m.setRhythm('8 beat');expect(m.activePatternCount).toBe(0);expect(f.transport.scheduleRepeat).not.toHaveBeenCalled();await m.setEnabled(true);expect(m.activePatternCount).toBe(1);await m.setEnabled(false);m.setMode('band');expect(m.activePatternCount).toBe(0);m.dispose()});

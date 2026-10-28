@@ -9,8 +9,9 @@
     // Explicit synthetic input fixture; never used by the production entry point.
     import { Hands } from "./src/tracking/hands";
     import { BodyPose } from "./src/body/pose";
+    import { FaceTracker } from "./src/tracking/face";
     import * as Tone from "tone";
-    const state = { pose: [], hands: [] };
+    const state = { pose: [], hands: [], handsInit:0, poseInit:0, handsCalls:0, poseCalls:0, handsClose:0, poseClose:0, faceInit:0, faceCalls:0, faceClose:0, faceY:0.5, cameraRequests:0, constraints:null };
     const canvas = document.createElement("canvas");
     canvas.width = 640;
     canvas.height = 480;
@@ -23,19 +24,22 @@
       requestAnimationFrame(draw);
     }
     draw();
-    navigator.mediaDevices.getUserMedia = async () => canvas.captureStream(15);
+    navigator.mediaDevices.getUserMedia = async (constraints) => {state.cameraRequests++;state.constraints=constraints;return canvas.captureStream(15)};
     Hands.prototype.init = async function () {
-      this.landmarker = { close() {} };
+      state.handsInit++;this.landmarker = { close() {state.handsClose++} };
     };
     Hands.prototype.detect = function () {
-      return state.hands;
+      state.handsCalls++;return state.hands;
     };
     BodyPose.prototype.init = async function () {
-      this.model = { close() {} };
+      state.poseInit++;this.model = { close() {state.poseClose++} };
     };
     BodyPose.prototype.detect = function () {
-      return state.pose;
+      state.poseCalls++;return state.pose;
     };
+    FaceTracker.prototype.start=async function(){state.faceInit++;this.fixtureActive=true};
+    FaceTracker.prototype.stop=function(){if(this.fixtureActive)state.faceClose++;this.fixtureActive=false};
+    FaceTracker.prototype.detect=function(){if(!this.fixtureActive)return;state.faceCalls++;return state.faceY};
     await import("./src/main");
     const meter = new Tone.Waveform(1024);
     Tone.getDestination().connect(meter);

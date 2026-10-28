@@ -1,10 +1,11 @@
 import { FilesetResolver, PoseLandmarker } from "@mediapipe/tasks-vision";
 import type { Landmark } from "./contact";
-/** One pose inference per video frame, capped at 15Hz and adaptive to inference cost. */
+/** One inference per new video frame, with a configurable rate ceiling. */
 export class BodyPose {
   model?: PoseLandmarker;
   error = "";
   inferenceMs = 0;
+  maxFps = 15;
   private generation = 0;
   private last = -Infinity;
   private videoTime = -1;
@@ -49,7 +50,7 @@ export class BodyPose {
     if (
       !this.model ||
       video.currentTime === this.videoTime ||
-      t - this.last < Math.max(1000 / 15, this.inferenceMs * 2)
+      t - this.last < 1000 / this.maxFps - 0.5
     )
       return;
     this.last = t;
